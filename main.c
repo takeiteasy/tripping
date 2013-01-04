@@ -65,6 +65,7 @@ bool_t  str_contains(const char* hay, const char* needle);
 bool_t  str_contains_ignore_case(const char* hay, const char* needle);
 bool_t  is_number(const char* str);
 
+/* Print usage */
 #define P_USAGE printf("Arguments:\n-h  -help:        Print help\n-g  -generate:    Generate tripcode\n-s  -search:      Search for tripcode\n-ic -ignore-case: Ignore case when searching\n-b  -benchmark:   Time & measure program\n-v  -verboose:    Verboose mode\n-f  -file:        Print to file\n\nExamples:\n./xtrip -g 10 -b:      Generates 10 random trips & time\n./xtrip or ./xtrip -g: The same as ./xtrip -g 1\n./xtrip -g test:       Generates trip from \"test\"\n./xtrip -s test -ic:   Search for trips with \"test\" in them & ignore case\n\nNotes:\nSearch mode will continue searching until ESC key is pressed.\nUsing -f with search mode will print to both terminal & file.\n")
 
 
@@ -214,7 +215,7 @@ char* trip_gen(const char* src, size_t src_len) {
 
 void srt_to_lower(char* dst, const char* src, size_t src_len) {
     for (uint32_t i = 0; i < src_len; ++i)
-        dst[i] = tolower(src[i]);
+        dst[i] = (char)tolower(src[i]);
     dst[src_len] = '\0';
 }
 
@@ -311,8 +312,8 @@ int main(int argc, const char* argv[]) {
               search_mode   = FALSE,
               p2file        = FALSE;
     
-    uint32_t total_gen = 0;
-    char* arg_str      = NULL; /* Freed at end */
+    int32_t total_gen = 0;
+    char*   arg_str   = NULL; /* Freed at end */
     
 #if (defined DEBUG || defined NDEBUG)
     verboose = TRUE;
@@ -424,7 +425,7 @@ int main(int argc, const char* argv[]) {
             free(dst);
         }
         else {
-            for (uint32_t i = 0; i < total_gen; ++i) {
+            for (int32_t i = 0; i < total_gen; ++i) {
                 uint32_t src_len = RAND_STR_LEN;
                 char* src = rand_str(src_len);
                 char* dst = trip_gen(src, src_len);
