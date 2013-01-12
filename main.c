@@ -252,18 +252,13 @@ bool_t  str_contains_ignore_case(const char* hay, const char* needle) {
 static bool_t (*str_contains_func)(const char*, const char*);
 
 bool_t  is_number(const char* str) {
-    bool_t  ret = TRUE;
-    for (uint32_t i = 0; i < strlen(str); i++) {
-        ret = isdigit(str[i]);
-        if (ret == FALSE) break;
-    }
-    return ret;
+    for (uint32_t i = 0; i < strlen(str); i++)
+	if (!isdigit(str[i]))
+		return FALSE;
+    return TRUE;
 }
 
 #if !defined _OS_WIN
-int32_t getch();
-int32_t kbhit();
-
 int32_t getch() {
 	struct termios o, n;
 	int32_t ch;
