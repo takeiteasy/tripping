@@ -1,9 +1,8 @@
 /*
-    main.c
-    xtrip
-
-    Created by Rusty on 22/12/2012.
-    Copyright (c) 2012 Denko Corp. All rights reserved.
+ * main.c
+ * xtrip
+ * Created by Rusty on 22/12/2012.
+ * Copyright (c) 2012 Denko Corp. All rights reserved.
  */
 
 #if ((__APPLE__ & __MACH__) || macintosh || Macintosh)
@@ -67,7 +66,6 @@ bool_t  is_number(const char* str);
 
 /* Print usage */
 #define P_USAGE printf("Arguments:\n-h  -help:        Print help\n-g  -generate:    Generate tripcode\n-s  -search:      Search for tripcode\n-ic -ignore-case: Ignore case when searching\n-b  -benchmark:   Time & measure program\n-v  -verboose:    Verboose mode\n-f  -file:        Print to file\n\nExamples:\n./xtrip -g 10 -b:      Generates 10 random trips & time\n./xtrip or ./xtrip -g: The same as ./xtrip -g 1\n./xtrip -g test:       Generates trip from \"test\"\n./xtrip -s test -ic:   Search for trips with \"test\" in them & ignore case\n\nNotes:\nSearch mode will continue searching until ESC key is pressed.\nUsing -f with search mode will print to both terminal & file.\n")
-
 
 /* Get system time */
 int64_t sys_time() {
@@ -464,3 +462,4 @@ int main(int argc, const char* argv[]) {
     }
     return EXIT_SUCCESS;
 }
+
