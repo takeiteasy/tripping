@@ -55,17 +55,15 @@ static char char_pool[] = { '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '
 
 /* Prototypes */
 int64_t sys_time();
-char* rand_str(uint32_t len);
-size_t htmlspecialchars(char* dst, const char* src, size_t src_len);
-void salt_gen(char* salt, const char* src, size_t src_len);
-char* trip_gen(const char* src, size_t src_len);
-void srt_to_lower(char* dst, const char* src, size_t src_len);
+char*   rand_str(uint32_t len);
+size_t  htmlspecialchars(char* dst, const char* src, size_t src_len);
+void    salt_gen(char* salt, const char* src, size_t src_len);
+char*   trip_gen(const char* src, size_t src_len);
+void    srt_to_lower(char* dst, const char* src, size_t src_len);
 bool_t  str_contains(const char* hay, const char* needle);
 bool_t  str_contains_ignore_case(const char* hay, const char* needle);
 bool_t  is_number(const char* str);
-
-/* Print usage */
-#define P_USAGE printf("Arguments:\n-h  -help:        Print help\n-g  -generate:    Generate tripcode\n-s  -search:      Search for tripcode\n-ic -ignore-case: Ignore case when searching\n-b  -benchmark:   Time & measure program\n-v  -verboose:    Verboose mode\n-f  -file:        Print to file\n\nExamples:\n./xtrip -g 10 -b:      Generates 10 random trips & time\n./xtrip or ./xtrip -g: The same as ./xtrip -g 1\n./xtrip -g test:       Generates trip from \"test\"\n./xtrip -s test -ic:   Search for trips with \"test\" in them & ignore case\n\nNotes:\nSearch mode will continue searching until ESC key is pressed.\nUsing -f with search mode will print to both terminal & file.\n")
+void    usage();
 
 /* Get system time */
 int64_t sys_time() {
@@ -217,7 +215,7 @@ void srt_to_lower(char* dst, const char* src, size_t src_len) {
     dst[src_len] = '\0';
 }
 
-bool_t  str_contains(const char* hay, const char* needle) {
+bool_t str_contains(const char* hay, const char* needle) {
     size_t h_s = strlen(hay);
     size_t n_s = strlen(needle);
     bool_t  matches = TRUE;
@@ -234,7 +232,7 @@ bool_t  str_contains(const char* hay, const char* needle) {
     return FALSE;
 }
 
-bool_t  str_contains_ignore_case(const char* hay, const char* needle) {
+bool_t str_contains_ignore_case(const char* hay, const char* needle) {
     size_t h_s = strlen(hay);
     char* hay_lower = (char*)malloc(h_s);
     srt_to_lower(hay_lower, hay, h_s);
@@ -249,7 +247,7 @@ bool_t  str_contains_ignore_case(const char* hay, const char* needle) {
 
 static bool_t (*str_contains_func)(const char*, const char*);
 
-bool_t  is_number(const char* str) {
+bool_t is_number(const char* str) {
     for (uint32_t i = 0; i < strlen(str); i++)
 	if (!isdigit(str[i]))
 		return FALSE;
@@ -293,8 +291,11 @@ int32_t kbhit() {
 }
 #endif
 
+void usage() {
+    printf("Arguments:\n-h  -help:        Print help\n-g  -generate:    Generate tripcode\n-s  -search:      Search for tripcode\n-ic -ignore-case: Ignore case when searching\n-b  -benchmark:   Time & measure program\n-v  -verboose:    Verboose mode\n-f  -file:        Print to file\n\nExamples:\n./xtrip -g 10 -b:      Generates 10 random trips & time\n./xtrip or ./xtrip -g: The same as ./xtrip -g 1\n./xtrip -g test:       Generates trip from \"test\"\n./xtrip -s test -ic:   Search for trips with \"test\" in them & ignore case\n\nNotes:\nSearch mode will continue searching until ESC key is pressed.\nUsing -f with search mode will print to both terminal & file.\n");
+}
+
 int main(int argc, const char* argv[]) {
-    int64_t start_time = sys_time();
     srand((uint32_t)(time(NULL)));
     
     bool_t  benchmark = FALSE,
@@ -320,7 +321,7 @@ int main(int argc, const char* argv[]) {
         /* Parse program arguments */
         for (int32_t i = 1; i < argc; ++i) {
             if (strcmp(argv[i], "-help")        == 0 || strcmp(argv[i], "-h")  == 0) {
-                P_USAGE;
+                usage();
                 return EXIT_SUCCESS;
             }
             if (strcmp(argv[i], "-benchmark")   == 0 || strcmp(argv[i], "-b")  == 0)
@@ -351,7 +352,7 @@ int main(int argc, const char* argv[]) {
             }
             if (strcmp(argv[i], "-search")      == 0 || strcmp(argv[i], "-s")  == 0) {
                 if ((i + 1) >= argc) {
-                    P_USAGE;
+                    usage();
                     return EXIT_FAILURE;
                 }
                 
@@ -364,7 +365,7 @@ int main(int argc, const char* argv[]) {
     
     /* Can't have no mode or both modes */
     if ((!gen_mode && !search_mode) || (gen_mode && search_mode)) {
-        P_USAGE;
+        usage();
         return EXIT_FAILURE;
     }
     
@@ -399,7 +400,7 @@ int main(int argc, const char* argv[]) {
         struct tm *ti;
         ti = localtime(&rt);
         char tb[128];
-        strftime(tb, sizeof(tb), "xtrip %Y-%m-%d at %H-%M-%S.txt", ti);
+        strftime(tb, sizeof(tb), "xtrip_%Y-%m-%d_at_%H-%M-%S.txt", ti);
         
         /* Open file stream */
         fp = fopen(tb, "w");
@@ -410,6 +411,7 @@ int main(int argc, const char* argv[]) {
     }
     else fp = stdout;
     
+    int64_t start_time = sys_time();
     if (gen_mode) {
         if (gen_from_src) {
             size_t arg_str_len = strlen(arg_str);

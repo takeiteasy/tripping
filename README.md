@@ -1,7 +1,7 @@
 # xtrip
 
 Generate & search for tripcodes. Works on *nix & Windows.
-
+Note: Is only single-threaded, and untested on Windows.
 <pre><code>
 Arguments:
 -h  -help:        Print help
