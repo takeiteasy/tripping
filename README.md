@@ -6,7 +6,7 @@ Released under the BSD license.
 # usage
 
 <code><pre>
-usage: xtrip [--option=value] [-v/b]
+usage: xtrip [--option=value] [-vb]
 
 Arguments:
  --help        Print this message
