@@ -3,9 +3,7 @@
 Multi-threaded tripcode generator/searcher, for Linux only.
 Released under the BSD license.
 
-# usage
-
-<code><pre>
+<pre>
 usage: xtrip [--option=value] [-vb]
 
 Arguments:
@@ -35,4 +33,4 @@ Examples:
 
 NOTE:
  To exit non-stop generate mode & search modes (when not using --timeout) press the ESCAPE key to end process
-</pre></code>
+</pre>
