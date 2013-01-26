@@ -63,9 +63,9 @@ bool str_contains_ignore_case(const char* a, const char* b);
 static bool (*str_contains)(const char*, const char*);
 
 void* gen_thread(void* arg);
+void* nstop_gen_thread(void* arg);
 void* search_thread(void* arg);
 bool  thread_quit(pthread_mutex_t* mutex);
-
 
 bool kbhit(void);
 int  getch(void);
@@ -76,8 +76,12 @@ int  getch(void);
 
 typedef struct {
 	int total, min, max;
-	// pthread_mutex_t* mtx;
 } gen_thread_arg;
+
+typedef struct {
+	int min, max;
+	pthread_mutex_t* mtx;
+} nstop_gen_thread_arg;
 
 typedef struct {
 	char* needle;
@@ -85,10 +89,5 @@ typedef struct {
 	pthread_mutex_t* mtx;
 } search_thread_arg;
 
-/* build: clang -Weverything main.c -o ~/bin/xtrip -lcrypto -lpthread
- *
- * TO-DO:
- * Write usage
- * Non-stop generate mode (Generate until escape is pressed)
- */
+/* build: clang -Weverything main.c -o ~/bin/xtrip -lcrypto -lpthread */
 

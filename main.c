@@ -56,9 +56,13 @@ int main(int argc, const char* argv[]) {
 	}
 	else {
 		for (int i = 1; i < argc; ++i) {
-			if (argv[i][0] == '-') {
+			if (argv[i][0] == '-') { /* It's an argument! Probably! */
 				if (argv[i][1] == '-') { /* Longer argument */
-					if (strcmp_fast(argv[i], "--benchmark"))
+					if (strcmp_fast(argv[i], "--help")) {
+						print_usage();
+						return EXIT_SUCCESS;
+					}
+					else if (strcmp_fast(argv[i], "--benchmark"))
 						benchmark = true;
 					else if (strcmp_fast(argv[i], "--verboose")) {
 						verboose  = true;
@@ -149,7 +153,11 @@ int main(int argc, const char* argv[]) {
 				}
 				else { /* Single character argument */
 					if (strlen(argv[i]) == 2) { /* Confirm it */
-						if (argv[i][1] == 'b')
+						if (argv[i][1] == 'h') {
+							print_usage();
+							return EXIT_SUCCESS;
+						}
+						else if (argv[i][1] == 'b')
 							benchmark = true;
 						else if (argv[i][1] == 'v') {
 							verboose  = true;
@@ -167,6 +175,7 @@ int main(int argc, const char* argv[]) {
 		}
 	}
 
+	/* Check if parameter passed in argument is blank */
 	if (test_mode && strlen(arg_val) <= 0) {
 		printf("ERROR! No value passed to test!\n");
 		print_usage();
@@ -175,51 +184,95 @@ int main(int argc, const char* argv[]) {
 
 	if (search_mode) {
 		size_t arg_val_len = strlen(arg_val);
-		if (arg_val_len <= 0) {
+		if (arg_val_len <= 0) { /* Check if paramter is blank */
 			printf("ERROR! No value passed to search!\n");
 			print_usage();
 			return EXIT_FAILURE;
 		}
-		if (arg_val_len > 11) {
+		if (arg_val_len > 11) { /* Check if paramter is too long */
 			printf("ERROR! Search value is longer than 11\n");
 			print_usage();
 			return EXIT_FAILURE;
 		}
 		
+		/* Set string contains function pointer */
 		if (ignore_case)
 			str_contains = str_contains_ignore_case;
 		else
 			str_contains = str_contains_normal;
 	}
 
+	/* Nothing to generate, go into non-stop mode */
 	if (gen_mode && total_gen == 0)
 		non_stop_gen = true;
 
-	if (!search_mode && !test_mode && !gen_mode) { /* No mode argument passed  */
+	/* No mode arugment passed, print a single random trip */
+	if (!search_mode && !test_mode && !gen_mode) {
 		gen_mode  = true;
 		total_gen = 1;
 	}
 
+	/* Too many threads or too few generation requests */
 	if (gen_mode && (total_threads > total_gen))
 		total_threads = 1;
 
+	/* Max random string length is lower than min, revert to default */
 	if (max_rnd_len <= min_rnd_len) {
 		min_rnd_len = DEF_MIN_RND_LEN;
 		max_rnd_len = DEF_MAX_RND_LEN;
 	}
 
-	long start_time = get_time();
-	if (test_mode) {
+	long start_time = get_time(); /* Start timing */
+	if (test_mode) { /* Test mode: evaluate string */
 		char* test_trip = gen_trip(arg_val, strlen(arg_val));
 		printf("%s => %s\n", arg_val, test_trip);
 		free(arg_val);
 		free(test_trip);
 	}
-	else if (gen_mode) {
-		if (non_stop_gen) {
-			/* TO-DO */
+	else if (gen_mode) { /* Just generate random trips */
+		if (non_stop_gen) { /* Generate trips until escape is pressed */
+			pthread_t threads[total_threads];
+			nstop_gen_thread_arg t_arg = { min_rnd_len, max_rnd_len, NULL };
+			int thread_ret = -1;
+
+			pthread_mutex_t g_mutex;
+			pthread_mutex_init(&g_mutex, NULL);
+			pthread_mutex_lock(&g_mutex); /* LOCKDOWN */
+			t_arg.mtx = &g_mutex;
+
+			for (int i = 0; i < total_threads; ++i) {
+				thread_ret = pthread_create(&threads[i], NULL, nstop_gen_thread, (void*)&t_arg);
+				if (thread_ret != 0) {
+					printf("ERROR! FAILED TO CREATE THREAD!\n");
+					return EXIT_FAILURE;
+				}
+			}
+
+			bool running = true;
+			while (running) {
+				while (!kbhit());
+
+				if (getch() == ESCAPE_KEY) {
+					printf("exiting generate\n");
+					running = false;
+				}
+			}
+			pthread_mutex_unlock(&g_mutex);
+
+			void* tmp = NULL;
+			for (int i = 0; i < total_threads; ++i) {
+				thread_ret = pthread_join(threads[i], &tmp);
+				if (thread_ret != 0) {
+					printf("ERROR! FAILED TO JOIN THREADS!\n");
+					return EXIT_FAILURE;
+				}
+
+				total_gen += *((int*)tmp);
+				free(tmp);
+				tmp = NULL;
+			}
 		}
-		else {
+		else { /* Generate specified amount */
 			if (total_threads == 1) {
 				gen_thread_arg t_arg = { total_gen, min_rnd_len, max_rnd_len };
 				gen_thread((void*)&t_arg);
@@ -228,7 +281,7 @@ int main(int argc, const char* argv[]) {
 				/* Determine how many trips each thread will generate */
 				int trips_per_thread = total_gen / total_threads;
 				int first_thread_total = trips_per_thread;
-				if ((trips_per_thread * total_threads) != total_gen) /* Account for remainder */
+				if ((trips_per_thread * total_threads) != total_gen)
 					first_thread_total += (total_gen - (trips_per_thread * total_threads)); /* Add remainder to first thread total */
 
 				pthread_t threads[total_threads];
@@ -257,7 +310,7 @@ int main(int argc, const char* argv[]) {
 			
 		}
 	}
-	else if (search_mode) {
+	else if (search_mode) { /* Try and match/find a trip */
 		pthread_t threads[total_threads];
 		search_thread_arg t_arg = { arg_val, min_rnd_len, max_rnd_len, NULL };
 		int thread_ret = -1;
@@ -284,13 +337,14 @@ int main(int argc, const char* argv[]) {
 				while (!kbhit());
 
 				if (getch() == ESCAPE_KEY) {
-					printf("exiting search!\n");
+					printf("exiting search\n");
 					running = false;
 				}
 			}
 		}
 		pthread_mutex_unlock(&s_mutex);
 
+		/* Join threads for clean up */
 		void* tmp = NULL;
 		for (int i = 0; i < total_threads; ++i) {
 			thread_ret = pthread_join(threads[i], &tmp);
@@ -304,7 +358,7 @@ int main(int argc, const char* argv[]) {
 			tmp = NULL;
 		}
 	}
-		
+
 	if (benchmark) {
 		float exec_time = ((get_time() - start_time) / 1000000.f);
 		printf("\nexec time:   %f\ntotal trips: %d\ntrips p/s:   %f\n",
@@ -314,7 +368,7 @@ int main(int argc, const char* argv[]) {
 }
 
 void print_usage() {
-	printf("help!\n");
+	printf("usage: xtrip [--option=value] [-v/b]\n\nArguments:\n --help        Print this message\n --test=$      Evaluate a string\n --generate=$  Generate random trips\n --generate=0  Dont' stop generating random trips (non-stop mode)\n --search=$    Try and find tripcodes that contain a string (ignores case)\n --Search=$    Try and find tripcodes that find that contain a string\n --threads=$   How many threads to use, default is 1\n --timeout=$   Timeout after X seconds instead of waiting for key press (search mode only)\n --min-len=$   Minimum length of random string (Default is 3)\n --max-len=$   Maximum length of random string (Default is 15)\n --benchmark   Time/Benchmark the program\n --verboose    Print verboose messages (also enables benchmarking)\n --generate    Same as --generate=0\n  -h           Same as --help\n  -g           Same as --generate\n  -b           Same as --benchmark\n  -v           Same as --verboose\n\nExamples:\n xtrip --generate=100 -b          Generate 100 random tripcodes & benchmark it\n xtrip --Search=\"TEST\" -v         Search for trips that contain \"TEST\" & verboose output\n xtrip --test=faggot              Will test \"faggot\" as a trip and will produce \"Ep8pui8Vw2\"\n xtrip --threads=8 --search=test  Spawn 8 threads all searching for trips with \"test\" in them (ignoring case)\n\nNOTE:\n To exit non-stop generate mode & search modes (when not using --timeout) press the ESCAPE key to end process\n");
 }
 
 long get_time() {
@@ -326,7 +380,7 @@ long get_time() {
 char* gen_trip(const char* src, size_t src_len) {
 	char* src_new = (char*)malloc((src_len + 2) * 5); /* Create safe buffer for htmlreplacechars */
 
-	/* PHP-like htmlreplacechars */
+	/* PHP-like htmlreplacechars, minus apostrophe */
 	size_t nlen = src_len, j = 0;
 	for (size_t i = 0; i < src_len; ++i) {
 		switch (src[i]) {
@@ -495,6 +549,29 @@ void* gen_thread(void* arg) {
 		free(trip);
 	}
 	return NULL;
+}
+
+void* nstop_gen_thread(void* arg) {
+	nstop_gen_thread_arg t_arg = *((nstop_gen_thread_arg*)arg);
+	size_t str_len = 0;
+	int total_gen  = 0;
+	int* ret_val   = malloc(sizeof(int));
+
+	while (!thread_quit(t_arg.mtx)) {
+		str_len = (size_t)RAND_STR_LEN(t_arg.min, t_arg.max);
+		char* str = (char*)malloc(str_len);
+		gen_rand_str(str, str_len);
+		char* trip = gen_trip(str, str_len);
+		
+		printf("%s => %s\n", str, trip);
+		free(str);
+		free(trip);
+
+		total_gen += 1;
+	}
+
+	*ret_val = total_gen;
+	return ret_val;
 }
 
 void* search_thread(void* arg) {
