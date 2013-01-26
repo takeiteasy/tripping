@@ -45,7 +45,7 @@
 #include <errno.h>
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
-#define ESCAPE_CHAR  27
+#define ESCAPE_KEY  27
 
 static char char_pool[] = { '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?', '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', ']', '^', '_', '`', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|', '}' };
 #define CHAR_POOL_LEN (ARRAY_SIZE(char_pool))
@@ -66,12 +66,17 @@ void* gen_thread(void* arg);
 void* search_thread(void* arg);
 bool  thread_quit(pthread_mutex_t* mutex);
 
+
+bool kbhit(void);
+int  getch(void);
+
 #define DEF_MIN_RND_LEN 3
 #define DEF_MAX_RND_LEN 15
 #define RAND_STR_LEN(a, b) ((rand() % ((b + 1) - a)) + a)
 
 typedef struct {
 	int total, min, max;
+	// pthread_mutex_t* mtx;
 } gen_thread_arg;
 
 typedef struct {
@@ -80,9 +85,10 @@ typedef struct {
 	pthread_mutex_t* mtx;
 } search_thread_arg;
 
-/* TO-DO
+/* build: clang -Weverything main.c -o ~/bin/xtrip -lcrypto -lpthread
+ *
+ * TO-DO:
  * Write usage
  * Non-stop generate mode (Generate until escape is pressed)
- * Multi-thread search mode
  */
 

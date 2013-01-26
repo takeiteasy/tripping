@@ -37,6 +37,7 @@ int main(int argc, const char* argv[]) {
 
 	bool  search_mode   = false,
 	      ignore_case   = false,
+	      timed_search  = false,
 	      test_mode     = false,
 	      gen_mode      = false,
 	      non_stop_gen  = false,
@@ -44,6 +45,7 @@ int main(int argc, const char* argv[]) {
 	      verboose      = false;
 	int   total_gen     = 0,
 	      total_threads = 1,
+	      timeout_val   = 0,
 	      min_rnd_len   = DEF_MIN_RND_LEN,
 	      max_rnd_len   = DEF_MAX_RND_LEN;
 	char* arg_val       = NULL;
@@ -55,7 +57,7 @@ int main(int argc, const char* argv[]) {
 	else {
 		for (int i = 1; i < argc; ++i) {
 			if (argv[i][0] == '-') {
-				if (argv[i][1] == '-') { /* longer argument */
+				if (argv[i][1] == '-') { /* Longer argument */
 					if (strcmp_fast(argv[i], "--benchmark"))
 						benchmark = true;
 					else if (strcmp_fast(argv[i], "--verboose")) {
@@ -68,15 +70,15 @@ int main(int argc, const char* argv[]) {
 						search_mode  = false;
 						non_stop_gen = true;
 					}
-					else { /* argument with a value */
+					else { /* Longer argument with a value */
 						int equals_loc = str_contains_char(argv[i], '=');
 						if (equals_loc != -1) { /* Confirm it */
-							/* Get string before first '=' */
+							/* Get the argument */
 							size_t cut_arg_len = (size_t)(equals_loc - 2);
 							char* t_arg = (char*)malloc(cut_arg_len);
 							memcpy(t_arg, argv[i] + 2, cut_arg_len);
 
-							/* Get everything else */
+							/* Get the value of the argument */
 							cut_arg_len += 3;
 							size_t cut_val_len = strlen(argv[i]) - cut_arg_len;
 							char* t_val = (char*)malloc(cut_val_len);
@@ -121,6 +123,14 @@ int main(int argc, const char* argv[]) {
 								if (total_threads < 1)
 									total_threads = 1;
 							}
+							else if (strcmp_fast(t_arg, "timeout")) {
+								timed_search  = true;
+								timeout_val   = (atoi(t_val) * 1000000); /* Seconds to microseconds */
+								if (timeout_val <= 0) {
+									timed_search = false;
+									timeout_val  = 0;
+								}
+							}
 							else if (strcmp_fast(t_arg, "min-len")) {
 								min_rnd_len = atoi(t_val);
 								if (min_rnd_len < 1)
@@ -137,7 +147,7 @@ int main(int argc, const char* argv[]) {
 						}
 					}
 				}
-				else { /* single character argument */
+				else { /* Single character argument */
 					if (strlen(argv[i]) == 2) { /* Confirm it */
 						if (argv[i][1] == 'b')
 							benchmark = true;
@@ -248,29 +258,50 @@ int main(int argc, const char* argv[]) {
 		}
 	}
 	else if (search_mode) {
+		pthread_t threads[total_threads];
 		search_thread_arg t_arg = { arg_val, min_rnd_len, max_rnd_len, NULL };
-		
-		if (total_threads == 1) {
-			void* tmp = search_thread((void*)&t_arg);
-			total_gen = *(int*)tmp;
-			free(tmp);
+		int thread_ret = -1;
+
+		pthread_mutex_t s_mutex;
+		pthread_mutex_init(&s_mutex, NULL);
+		pthread_mutex_lock(&s_mutex); /* LOCK. DAT. SHIT. DOWN. */
+		t_arg.mtx = &s_mutex;
+
+		for (int i = 0; i < total_threads; ++i) {
+			thread_ret = pthread_create(&threads[i], NULL, search_thread, (void*)&t_arg);
+			if (thread_ret != 0) {
+				printf("ERROR! FAILED TO CREATE THREADS!\n");
+				return EXIT_FAILURE;
+			}
 		}
+
+
+		if (timed_search)
+			usleep((unsigned)timeout_val); /* YOU'RE FEELING SLEEEEEEPY */
 		else {
-			pthread_t thread_test;
-			pthread_mutex_t mutex_test;
-			pthread_mutex_init(&mutex_test, NULL);
-			pthread_mutex_lock(&mutex_test);
-			t_arg.mtx = &mutex_test;
-			pthread_create(&thread_test, NULL, search_thread, (void*)&t_arg);
+			bool running = true;
+			while (running) {
+				while (!kbhit());
 
-			usleep(5000000);
+				if (getch() == ESCAPE_KEY) {
+					printf("exiting search!\n");
+					running = false;
+				}
+			}
+		}
+		pthread_mutex_unlock(&s_mutex);
 
-			pthread_mutex_unlock(&mutex_test);
+		void* tmp = NULL;
+		for (int i = 0; i < total_threads; ++i) {
+			thread_ret = pthread_join(threads[i], &tmp);
+			if (thread_ret != 0) {
+				printf("ERROR! FAILED TO JOIN THREADS!\n");
+				return EXIT_FAILURE;
+			}
 
-			void* tmp = NULL;
-			pthread_join(thread_test, &tmp);
-			total_gen = *(int*)tmp;
+			total_gen += *(int*)tmp;
 			free(tmp);
+			tmp = NULL;
 		}
 	}
 		
@@ -490,6 +521,7 @@ void* search_thread(void* arg) {
 	return ret_val;
 }
 
+/* Threads check if shared mutex* is still locked, if not, end loop */
 bool thread_quit(pthread_mutex_t* mutex) {
 	switch (pthread_mutex_trylock(mutex)) {
 		case 0:
@@ -499,5 +531,38 @@ bool thread_quit(pthread_mutex_t* mutex) {
 			return false;
 	}
 	return true;
+}
+
+bool kbhit() {
+	struct termios oldt, newt;
+	tcgetattr(STDIN_FILENO, &oldt);
+	newt = oldt;
+	newt.c_lflag &= ~(unsigned)(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+	
+	int f = fcntl(STDIN_FILENO, F_GETFL, 0);
+	fcntl(STDIN_FILENO, F_SETFL, f | O_NONBLOCK);
+
+	int ch = getchar();
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+	fcntl(STDIN_FILENO, F_SETFL, f);
+
+	if (ch != EOF) {
+		ungetc(ch, stdin); /* -Weverything: warning: disabled expansion of recursive macro [-Wdisabled-macro-expansion] (note: expanded from macro 'stdin' - #define stdin stdin) */
+		return true;
+	}
+	return false;
+}
+
+int getch() {
+	struct termios oldt, newt;
+	tcgetattr(STDIN_FILENO, &oldt);
+	newt = oldt;
+	newt.c_lflag &= ~(unsigned)(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+	int ch = getchar();
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+	return toascii(ch);
 }
 
