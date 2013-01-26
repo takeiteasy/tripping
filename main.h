@@ -62,6 +62,7 @@ bool str_contains_ignore_case(const char* a, const char* b);
 static bool (*str_contains)(const char*, const char*);
 
 void* gen_thread(void* arg);
+void* search_thread(void* arg);
 
 #define DEF_MIN_RND_LEN 3
 #define DEF_MAX_RND_LEN 15
@@ -69,7 +70,12 @@ void* gen_thread(void* arg);
 
 typedef struct {
 	int total, min, max;
-} thread_arg;
+} gen_thread_arg;
+
+typedef struct {
+	char* needle;
+	int min, max;
+} search_thread_arg;
 
 /* TO-DO
  * Write usage

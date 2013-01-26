@@ -111,7 +111,7 @@ int main(int argc, const char* argv[]) {
 								test_mode   = false;
 								gen_mode    = false;
 								search_mode = true;
-								ignore_case = true;
+								ignore_case = false;
 								
 								arg_val = (char*)malloc(cut_val_len);
 								memcpy(arg_val, t_val, cut_val_len);
@@ -170,17 +170,16 @@ int main(int argc, const char* argv[]) {
 			print_usage();
 			return EXIT_FAILURE;
 		}
-		else if (arg_val_len > 11) {
+		if (arg_val_len > 11) {
 			printf("ERROR! Search value is longer than 11\n");
 			print_usage();
 			return EXIT_FAILURE;
 		}
-		else {
-			if (ignore_case)
-				str_contains = str_contains_ignore_case;
-			else
-				str_contains = str_contains_normal;
-		}
+		
+		if (ignore_case)
+			str_contains = str_contains_ignore_case;
+		else
+			str_contains = str_contains_normal;
 	}
 
 	if (gen_mode && total_gen == 0)
@@ -199,7 +198,6 @@ int main(int argc, const char* argv[]) {
 		max_rnd_len = DEF_MAX_RND_LEN;
 	}
 
-	/* Only time the generating, not the argument parsing */
 	long start_time = get_time();
 	if (test_mode) {
 		char* test_trip = gen_trip(arg_val, strlen(arg_val));
@@ -209,11 +207,11 @@ int main(int argc, const char* argv[]) {
 	}
 	else if (gen_mode) {
 		if (non_stop_gen) {
-		
+			/* TO-DO */
 		}
 		else {
 			if (total_threads == 1) {
-				thread_arg t_arg = { total_gen, min_rnd_len, max_rnd_len };
+				gen_thread_arg t_arg = { total_gen, min_rnd_len, max_rnd_len };
 				gen_thread((void*)&t_arg);
 			}
 			else {
@@ -224,7 +222,7 @@ int main(int argc, const char* argv[]) {
 					first_thread_total += (total_gen - (trips_per_thread * total_threads)); /* Add remainder to first thread total */
 
 				pthread_t threads[total_threads];
-				thread_arg thread_arg;
+				gen_thread_arg thread_arg;
 				int thread_ret = -1;
 				
 				for (int i = 0; i < total_threads; ++i) {
@@ -250,7 +248,12 @@ int main(int argc, const char* argv[]) {
 		}
 	}
 	else if (search_mode) {
-	
+		if (total_threads == 1) {
+			search_thread_arg t_arg = { arg_val, min_rnd_len, max_rnd_len };
+
+		}
+		else {
+		}
 	}
 		
 	if (benchmark) {
@@ -276,7 +279,7 @@ char* gen_trip(const char* src, size_t src_len) {
 
 	/* PHP-like htmlreplacechars */
 	size_t nlen = src_len, j = 0;
-	for (unsigned int i = 0; i < src_len; ++i) {
+	for (size_t i = 0; i < src_len; ++i) {
 		switch (src[i]) {
 			case '&':
 				src_new[j]     = '&';
@@ -341,7 +344,7 @@ char* gen_trip(const char* src, size_t src_len) {
 	}
 	salt[2] = '\0';
 	
-	/* Replace chars */
+	/* Replace invalid chars */
 	for (int i = 0; i < 2; ++i) {
 		if (salt[i] < '.' || salt[i] > 'z')
 			salt[i] = '.';
@@ -399,12 +402,13 @@ bool str_contains_normal(const char* a, const char* b) {
 	if (needle_len > hay_len)
 		return false;
 
-	bool matches = true;
 	for (size_t i = 0; i < hay_len; ++i) {
 		if (a[i] == b[0]) {
+			bool match = true;
 			for (size_t j = 1; j < needle_len; ++j)
-				matches = (a[i + j] != b[j]);
-			if (matches)
+				if (a[i + j] != b[j])
+					match = false;
+			if (match)
 				return true;
 		}
 	}
@@ -429,8 +433,9 @@ bool str_contains_ignore_case(const char* a, const char* b) {
 }
 
 void* gen_thread(void* arg) {
-	thread_arg t_arg = *((thread_arg*)arg);
+	gen_thread_arg t_arg = *((gen_thread_arg*)arg);
 	size_t str_len  = 0;
+	
 	for (int i = 0; i < t_arg.total; ++i) {
 		str_len = (size_t)RAND_STR_LEN(t_arg.min, t_arg.max);
 		char* str = (char*)malloc(str_len);
@@ -441,5 +446,23 @@ void* gen_thread(void* arg) {
 		free(trip);
 	}
 	return NULL;
+}
+
+void* search_thread(void* arg) {
+	search_thread_arg t_arg = *((search_thread_arg*)arg);
+	size_t str_len   = 0;
+	
+	//while (true) {
+	for (int i = 0; i < 100; ++i) {
+		str_len = (size_t)RAND_STR_LEN(t_arg.min, t_arg.max);
+		char* str = (char*)malloc(str_len);
+		gen_rand_str(str, str_len);
+		char* trip = gen_trip(str, str_len);
+
+		if (str_contains(trip, t_arg.needle))
+			printf("%s => %s\n", str, trip);
+		free(str);
+		free(trip);
+	}
 }
 
