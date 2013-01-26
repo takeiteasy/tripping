@@ -222,15 +222,15 @@ int main(int argc, const char* argv[]) {
 					first_thread_total += (total_gen - (trips_per_thread * total_threads)); /* Add remainder to first thread total */
 
 				pthread_t threads[total_threads];
-				gen_thread_arg thread_arg;
+				gen_thread_arg t_arg;
 				int thread_ret = -1;
 				
 				for (int i = 0; i < total_threads; ++i) {
-					thread_arg.total = (i == 0 ? first_thread_total : trips_per_thread);
-					thread_arg.min   = min_rnd_len;
-					thread_arg.max   = max_rnd_len;
+					t_arg.total = (i == 0 ? first_thread_total : trips_per_thread);
+					t_arg.min   = min_rnd_len;
+					t_arg.max   = max_rnd_len;
 
-					thread_ret = pthread_create(&threads[i], NULL, gen_thread, (void*)&thread_arg);
+					thread_ret = pthread_create(&threads[i], NULL, gen_thread, (void*)&t_arg);
 					if (thread_ret != 0) {
 						printf("ERROR! FAILED TO CREATE THREADS!\n");
 						return EXIT_FAILURE;
@@ -248,11 +248,29 @@ int main(int argc, const char* argv[]) {
 		}
 	}
 	else if (search_mode) {
+		search_thread_arg t_arg = { arg_val, min_rnd_len, max_rnd_len, NULL };
+		
 		if (total_threads == 1) {
-			search_thread_arg t_arg = { arg_val, min_rnd_len, max_rnd_len };
-
+			void* tmp = search_thread((void*)&t_arg);
+			total_gen = *(int*)tmp;
+			free(tmp);
 		}
 		else {
+			pthread_t thread_test;
+			pthread_mutex_t mutex_test;
+			pthread_mutex_init(&mutex_test, NULL);
+			pthread_mutex_lock(&mutex_test);
+			t_arg.mtx = &mutex_test;
+			pthread_create(&thread_test, NULL, search_thread, (void*)&t_arg);
+
+			usleep(5000000);
+
+			pthread_mutex_unlock(&mutex_test);
+
+			void* tmp = NULL;
+			pthread_join(thread_test, &tmp);
+			total_gen = *(int*)tmp;
+			free(tmp);
 		}
 	}
 		
@@ -450,10 +468,11 @@ void* gen_thread(void* arg) {
 
 void* search_thread(void* arg) {
 	search_thread_arg t_arg = *((search_thread_arg*)arg);
-	size_t str_len   = 0;
-	
-	//while (true) {
-	for (int i = 0; i < 100; ++i) {
+	size_t str_len = 0;
+	int total_gen  = 0;
+	int* ret_val   = malloc(sizeof(int));
+
+	while (!thread_quit(t_arg.mtx)) {
 		str_len = (size_t)RAND_STR_LEN(t_arg.min, t_arg.max);
 		char* str = (char*)malloc(str_len);
 		gen_rand_str(str, str_len);
@@ -463,6 +482,22 @@ void* search_thread(void* arg) {
 			printf("%s => %s\n", str, trip);
 		free(str);
 		free(trip);
+
+		total_gen += 1;
 	}
+
+	*ret_val = total_gen;
+	return ret_val;
+}
+
+bool thread_quit(pthread_mutex_t* mutex) {
+	switch (pthread_mutex_trylock(mutex)) {
+		case 0:
+			pthread_mutex_unlock(mutex);
+			return true;
+		case EBUSY:
+			return false;
+	}
+	return true;
 }
 

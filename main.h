@@ -42,6 +42,7 @@
 
 #include <openssl/des.h>
 #include <pthread.h>
+#include <errno.h>
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 #define ESCAPE_CHAR  27
@@ -63,6 +64,7 @@ static bool (*str_contains)(const char*, const char*);
 
 void* gen_thread(void* arg);
 void* search_thread(void* arg);
+bool  thread_quit(pthread_mutex_t* mutex);
 
 #define DEF_MIN_RND_LEN 3
 #define DEF_MAX_RND_LEN 15
@@ -75,6 +77,7 @@ typedef struct {
 typedef struct {
 	char* needle;
 	int min, max;
+	pthread_mutex_t* mtx;
 } search_thread_arg;
 
 /* TO-DO
