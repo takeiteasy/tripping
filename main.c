@@ -223,7 +223,7 @@ int main(int argc, const char* argv[]) {
 	}
 
 	long start_time = get_time(); /* Start timing */
-	if (test_mode) { /* Test mode: evaluate string */
+	if (test_mode) { /* Test mode: Just evaluate string */
 		char* test_trip = gen_trip(arg_val, strlen(arg_val));
 		printf("%s => %s\n", arg_val, test_trip);
 		free(arg_val);
@@ -237,7 +237,7 @@ int main(int argc, const char* argv[]) {
 
 			pthread_mutex_t g_mutex;
 			pthread_mutex_init(&g_mutex, NULL);
-			pthread_mutex_lock(&g_mutex); /* LOCKDOWN */
+			pthread_mutex_lock(&g_mutex);
 			t_arg.mtx = &g_mutex;
 
 			for (int i = 0; i < total_threads; ++i) {
@@ -269,7 +269,6 @@ int main(int argc, const char* argv[]) {
 
 				total_gen += *((int*)tmp);
 				free(tmp);
-				tmp = NULL;
 			}
 		}
 		else { /* Generate specified amount */
@@ -317,7 +316,7 @@ int main(int argc, const char* argv[]) {
 
 		pthread_mutex_t s_mutex;
 		pthread_mutex_init(&s_mutex, NULL);
-		pthread_mutex_lock(&s_mutex); /* LOCK. DAT. SHIT. DOWN. */
+		pthread_mutex_lock(&s_mutex);
 		t_arg.mtx = &s_mutex;
 
 		for (int i = 0; i < total_threads; ++i) {
@@ -330,7 +329,7 @@ int main(int argc, const char* argv[]) {
 
 
 		if (timed_search)
-			usleep((unsigned)timeout_val); /* YOU'RE FEELING SLEEEEEEPY */
+			usleep((unsigned)timeout_val);
 		else {
 			bool running = true;
 			while (running) {
@@ -355,7 +354,6 @@ int main(int argc, const char* argv[]) {
 
 			total_gen += *(int*)tmp;
 			free(tmp);
-			tmp = NULL;
 		}
 	}
 
