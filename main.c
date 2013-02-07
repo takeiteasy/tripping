@@ -631,7 +631,6 @@ bool kbhit() {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
 #endif
-
 		ungetc(ch, stdin); /* -Weverything: warning: disabled expansion of recursive macro [-Wdisabled-macro-expansion] (note: expanded from macro 'stdin' - #define stdin stdin) */
 #ifdef __clang__
 #pragma clang diagnostic pop

@@ -89,5 +89,5 @@ typedef struct {
 	pthread_mutex_t* mtx;
 } search_thread_arg;
 
-/* build: clang -Weverything main.c -o ~/bin/xtrip -lcrypto -lpthread */
+/* build: clang -Weverything -O3 main.c -o ~/bin/xtrip -pthread -lcrypto  */
 

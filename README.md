@@ -34,3 +34,9 @@ Examples:
 NOTE:
  To exit non-stop generate mode & search modes (when not using --timeout) press the ESCAPE key to end process
 </pre>
+
+Tested with clang, built with: 
+<pre>
+clang -Weverything -O3 main.c -o ~/bin/xtrip -pthread -lcrypto
+</pre>
+
