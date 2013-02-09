@@ -32,11 +32,11 @@ Examples:
  xtrip --threads=8 --search=test  Spawn 8 threads all searching for trips with "test" in them (ignoring case)
 
 NOTE:
- To exit non-stop generate mode & search modes (when not using --timeout) press the ESCAPE key to end process
+ To exit non-stop generate mode & search modes (when not using --timeout) send either SIGTERM (kill command) or SIGINT (ctrl-c)
 </pre>
 
 Tested with clang, built with: 
 <pre>
 clang -Weverything -O3 main.c -o ~/bin/xtrip -pthread -lcrypto
 </pre>
-
+Or just just the makefile

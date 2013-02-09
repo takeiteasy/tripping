@@ -35,10 +35,8 @@
 #include <time.h>
 #include <string.h>
 #include <ctype.h>
-
-#include <termios.h>
 #include <unistd.h>
-#include <fcntl.h>
+#include <signal.h>
 
 #include <openssl/des.h>
 #define _MULTI_THREADED
@@ -67,6 +65,7 @@ void* gen_thread(void*);
 void* nstop_gen_thread(void*);
 void* search_thread(void*);
 bool  thread_quit(pthread_mutex_t*);
+void  signal_handle(int signal);
 
 bool kbhit(void);
 int  getch(void);
@@ -89,6 +88,8 @@ typedef struct {
 	int min, max;
 	pthread_mutex_t* mtx;
 } search_thread_arg;
+
+static volatile sig_atomic_t exit_loops = 0;
 
 /* build: clang -Weverything -O3 main.c -o ~/bin/xtrip -pthread -lcrypto  */
 

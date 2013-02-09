@@ -222,6 +222,10 @@ int main(int argc, const char* argv[]) {
 		max_rnd_len = DEF_MAX_RND_LEN;
 	}
 
+	/* Set up signals */
+	signal(SIGTERM, signal_handle);
+	signal(SIGINT,  signal_handle);
+	
 	long start_time = get_time(); /* Start timing */
 	if (test_mode) { /* Test mode: Just evaluate string */
 		char* test_trip = gen_trip(arg_val, strlen(arg_val));
@@ -248,17 +252,9 @@ int main(int argc, const char* argv[]) {
 				}
 			}
 
-			bool running = true;
-			while (running) {
-				while (!kbhit());
-
-				if (getch() == ESCAPE_KEY) {
-					printf("exiting generate\n");
-					running = false;
-				}
-			}
+			while (!exit_loops);
 			pthread_mutex_unlock(&g_mutex);
-
+			
 			void* tmp = NULL;
 			for (int i = 0; i < total_threads; ++i) {
 				thread_ret = pthread_join(threads[i], &tmp);
@@ -330,19 +326,10 @@ int main(int argc, const char* argv[]) {
 
 		if (timed_search)
 			usleep((unsigned)timeout_val);
-		else {
-			bool running = true;
-			while (running) {
-				while (!kbhit());
-
-				if (getch() == ESCAPE_KEY) {
-					printf("exiting search\n");
-					running = false;
-				}
-			}
-		}
+		else
+			while (!exit_loops);
 		pthread_mutex_unlock(&s_mutex);
-
+		
 		/* Join threads for clean up */
 		void* tmp = NULL;
 		for (int i = 0; i < total_threads; ++i) {
@@ -366,7 +353,7 @@ int main(int argc, const char* argv[]) {
 }
 
 void print_usage() {
-	printf("usage: xtrip [--option=value] [-v/b]\n\nArguments:\n --help        Print this message\n --test=$      Evaluate a string\n --generate=$  Generate random trips\n --generate=0  Dont' stop generating random trips (non-stop mode)\n --search=$    Try and find tripcodes that contain a string (ignores case)\n --Search=$    Try and find tripcodes that find that contain a string\n --threads=$   How many threads to use, default is 1\n --timeout=$   Timeout after X seconds instead of waiting for key press (search mode only)\n --min-len=$   Minimum length of random string (Default is 3)\n --max-len=$   Maximum length of random string (Default is 15)\n --benchmark   Time/Benchmark the program\n --verboose    Print verboose messages (also enables benchmarking)\n --generate    Same as --generate=0\n  -h           Same as --help\n  -g           Same as --generate\n  -b           Same as --benchmark\n  -v           Same as --verboose\n\nExamples:\n xtrip --generate=100 -b          Generate 100 random tripcodes & benchmark it\n xtrip --Search=\"TEST\" -v         Search for trips that contain \"TEST\" & verboose output\n xtrip --test=faggot              Will test \"faggot\" as a trip and will produce \"Ep8pui8Vw2\"\n xtrip --threads=8 --search=test  Spawn 8 threads all searching for trips with \"test\" in them (ignoring case)\n\nNOTE:\n To exit non-stop generate mode & search modes (when not using --timeout) press the ESCAPE key to end process\n");
+	printf("usage: xtrip [--option=value] [-v/b]\n\nArguments:\n --help        Print this message\n --test=$      Evaluate a string\n --generate=$  Generate random trips\n --generate=0  Dont' stop generating random trips (non-stop mode)\n --search=$    Try and find tripcodes that contain a string (ignores case)\n --Search=$    Try and find tripcodes that find that contain a string\n --threads=$   How many threads to use, default is 1\n --timeout=$   Timeout after X seconds instead of waiting for signal (search mode only)\n --min-len=$   Minimum length of random string (Default is 3)\n --max-len=$   Maximum length of random string (Default is 15)\n --benchmark   Time/Benchmark the program\n --verboose    Print verboose messages (also enables benchmarking)\n --generate    Same as --generate=0\n  -h           Same as --help\n  -g           Same as --generate\n  -b           Same as --benchmark\n  -v           Same as --verboose\n\nExamples:\n xtrip --generate=100 -b          Generate 100 random tripcodes & benchmark it\n xtrip --Search=\"TEST\" -v         Search for trips that contain \"TEST\" & verboose output\n xtrip --test=faggot              Will test \"faggot\" as a trip and will produce \"Ep8pui8Vw2\"\n xtrip --threads=8 --search=test  Spawn 8 threads all searching for trips with \"test\" in them (ignoring case)\n\nNOTE:\n To exit non-stop generate mode & search modes (when not using --timeout) send either SIGTERM (kill command) or SIGINT (ctrl-c)\n");
 }
 
 long get_time() {
@@ -612,44 +599,18 @@ bool thread_quit(pthread_mutex_t* mutex) {
 	return true;
 }
 
-bool kbhit() {
-	struct termios oldt, newt;
-	tcgetattr(STDIN_FILENO, &oldt);
-	newt = oldt;
-	newt.c_lflag &= ~(unsigned)(ICANON | ECHO);
-	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-	
-	int f = fcntl(STDIN_FILENO, F_GETFL, 0);
-	fcntl(STDIN_FILENO, F_SETFL, f | O_NONBLOCK);
-
-	int ch = getchar();
-	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-	fcntl(STDIN_FILENO, F_SETFL, f);
-
-	if (ch != EOF) {
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
-#endif
-		ungetc(ch, stdin); /* -Weverything: warning: disabled expansion of recursive macro [-Wdisabled-macro-expansion] (note: expanded from macro 'stdin' - #define stdin stdin) */
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
-
-		return true;
+void signal_handle(int signal) {
+	switch (signal) {
+		case SIGTERM:
+			printf(" EXITING: SIGTERM (terminated)\n");
+			break;
+		case SIGINT:
+			printf(" EXITING: SIGINT (interrupted)\n");
+			break;
+		default:
+			printf(" EXITING: UNKNOWN (%d)\n", signal);
+			break;
 	}
-	return false;
-}
-
-int getch() {
-	struct termios oldt, newt;
-	tcgetattr(STDIN_FILENO, &oldt);
-	newt = oldt;
-	newt.c_lflag &= ~(unsigned)(ICANON | ECHO);
-	tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-	int ch = getchar();
-	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-	return toascii(ch);
+	exit_loops = 1;
 }
 
