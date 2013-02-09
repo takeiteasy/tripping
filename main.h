@@ -41,6 +41,7 @@
 #include <fcntl.h>
 
 #include <openssl/des.h>
+#define _MULTI_THREADED
 #include <pthread.h>
 #include <errno.h>
 
@@ -52,20 +53,20 @@ static char char_pool[] = { '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '
 
 void   print_usage(void);
 long   get_time(void);
-char*  gen_trip(const char* src, size_t src_len);
-void   gen_rand_str(char* dst, size_t len);
-bool   strcmp_fast(const char* a, const char* b);
-int    str_contains_char(const char* hay, char needle);
-void   str_to_lower(char* dst, const char* src, size_t src_len);
+char*  gen_trip(const char*, size_t);
+void   gen_rand_str(char*, size_t);
+bool   strcmp_fast(const char*, const char*);
+int    str_contains_char(const char*, char);
+void   str_to_lower(char*, const char*, size_t);
 
-bool str_contains_normal(const char* a, const char* b);
-bool str_contains_ignore_case(const char* a, const char* b);
+bool str_contains_normal(const char*, const char*);
+bool str_contains_ignore_case(const char*, const char*);
 static bool (*str_contains)(const char*, const char*);
 
-void* gen_thread(void* arg);
-void* nstop_gen_thread(void* arg);
-void* search_thread(void* arg);
-bool  thread_quit(pthread_mutex_t* mutex);
+void* gen_thread(void*);
+void* nstop_gen_thread(void*);
+void* search_thread(void*);
+bool  thread_quit(pthread_mutex_t*);
 
 bool kbhit(void);
 int  getch(void);

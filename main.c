@@ -486,7 +486,7 @@ bool strcmp_fast(const char* a, const char* b) {
 
 void str_to_lower(char* dst, const char* src, size_t src_len) {
 	for (size_t i = 0; i < src_len; ++i) {
-		if (dst[i] >= 65 && dst[i] <= 90)
+		if (src[i] >= 65 && src[i] <= 90)
 			dst[i] = (src[i] + 32);
 		else
 			dst[i] = src[i]; /* Not a capital */
