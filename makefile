@@ -1,6 +1,8 @@
 CC     = clang
 CFLAGS = -Weverything -O3
 LINKER = -pthread -lcrypto
+OBJS   = main.c
+OUT    = ~/bin/xtrip
 
-xtrip:
-	$(CC) $(CFLAGS) main.c -o xtrip $(LINKER)
+all: $(OBJS)
+	$(CC) $(CFLAGS) $(OBJS) $(AFLAGS) -o $(OUT) $(LINKER)
