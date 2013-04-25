@@ -1,4 +1,4 @@
-# xtrip
+## xtrip
 
 Multi-threaded tripcode generator/searcher, for Linux only.
 Released under the BSD license.
