@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <signal.h>
 #include <time.h>
+#include <mach/mach_time.h> /* OSX */
 #include "tripcode.h"
 
 typedef enum {

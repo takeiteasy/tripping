@@ -188,9 +188,28 @@ void signal_handler(int signal) {
 }
 
 long get_time() {
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ((long)(ts.tv_sec) * 1000000 + ts.tv_nsec / 1000);
+	static mach_timebase_info_data_t freq = {0, 0};
+	if (freq.denom == 0)
+		mach_timebase_info(&freq);
+	return (mach_absolute_time() * freq.numer / freq.denom) / 1000;
+
+	/* Linux
+	 * struct timespec ts;
+	 * clock_gettime(CLOCK_MONOTONIC, &ts);
+	 * return ((long)(ts.tv_sec) * 1000000 + ts.tv_nsec / 1000);
+	 *
+	 * Windows
+	 * HANDLE cur_thread   = GetCurrentThread();
+	 * DWORD_PTR prev_mask = SetThreadAffinityMask(cur_thread, 1);
+	 *
+	 * static LARGE_INTEGER freq;
+	 * QueryPerformanceFrequency(&freq);
+	 * LARGE_INTEGER time;
+	 * QueryPerformanceCounter(&time);
+	 *
+	 * SetThreadAffinityMask(cur_thread, prev_mask);
+	 * return (1000000 * time.QuadPart / freq.QuadPart);
+	 */
 }
 
 void single_mode() {
