@@ -1,7 +1,6 @@
 CC     = clang
 CFLAGS = -Weverything -O3
-LINKER = -pthread -lcrypto
-OUT    = ~/bin/xtrip
+LINKER = -pthread -lcrypto -liconv
 
-all:
-	$(CC) $(CFLAGS) *.c $(AFLAGS) -o $(OUT) $(LINKER)
+all: main.c tripcode.c
+	$(CC) $(CFLAGS) main.c tripcode.c $(AFLAGS) $(LINKER)

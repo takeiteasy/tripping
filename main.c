@@ -22,26 +22,22 @@ int main(int argc, const char *argv[]) {
 			if (argc >= 2) {
 				total_gen = (unsigned)atoi(argv[2]);
 				++extra_args;
-			}
-			else {
+			} else {
 				printf("ERROR! Generate mode requires another argument!\n");
 				return EXIT_FAILURE;
 			}
-		}
-		else if (strcmp(argv[1], "mine") == 0) {
+		} else if (strcmp(argv[1], "mine") == 0) {
 			mode = M_MINE;
 			if (argc >= 2) {
 				size_t arg_len = strlen(argv[2]);
-				mine_regex = (char*)malloc(arg_len * sizeof(char));
+				mine_regex = malloc(arg_len);
 				strncpy(mine_regex, argv[2], arg_len);
 				++extra_args;
-			}
-			else {
+			} else {
 				printf("ERROR! Mine mode requires another argument!\n");
 				return EXIT_FAILURE;
 			}
-		}
-		else {
+		} else {
 			printf("ERROR! Invalid mode entered!\n\n");
 			print_help();
 			return EXIT_FAILURE;
@@ -83,8 +79,7 @@ int main(int argc, const char *argv[]) {
 					printf("WARNING! Invalid number of threads entered! Using single-threading!\n");
 					threads = 1;
 				}
-			}
-			else if (strcmp("--timeout", argv[i]) == 0 || strcmp("-t", argv[i]) == 0) {
+			} else if (strcmp("--timeout", argv[i]) == 0 || strcmp("-t", argv[i]) == 0) {
 				if ((i + 1) > (argc - 1)) {
 					printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
 					continue;
@@ -97,15 +92,13 @@ int main(int argc, const char *argv[]) {
 					timeout      = 0;
 					mine_timeout = false;
 				}
-			}
-			else if (strcmp("--min-rnd", argv[i]) == 0 || strcmp("-min", argv[i]) == 0) {
+			} else if (strcmp("--min-rnd", argv[i]) == 0 || strcmp("-min", argv[i]) == 0) {
 				if ((i + 1) > (argc - 1)) {
 					printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
 					continue;
 				}
 				min_rnd = (unsigned)atoi(argv[++i]);
-			}
-			else if (strcmp("--max-rnd", argv[i]) == 0 || strcmp("-max", argv[i]) == 0) {
+			} else if (strcmp("--max-rnd", argv[i]) == 0 || strcmp("-max", argv[i]) == 0) {
 				if ((i + 1) > (argc - 1)) {
 					printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
 					continue;
@@ -188,12 +181,12 @@ void signal_handler(int signal) {
 }
 
 long get_time() {
-#if ((__APPLE__ & __MACH__) || macintosh || Macintosh)
+#if defined PLAT_OSX
 	static mach_timebase_info_data_t freq = {0, 0};
 	if (freq.denom == 0)
 		mach_timebase_info(&freq);
 	return (mach_absolute_time() * freq.numer / freq.denom) / 1000;
-#elif (__WIN32__ || _WIN32 || _WIN64 || __WINDOWS__)
+#elif defined PLAT_WIN
 	HANDLE cur_thread   = GetCurrentThread();
 	DWORD_PTR prev_mask = SetThreadAffinityMask(cur_thread, 1);
 	
