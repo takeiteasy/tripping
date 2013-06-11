@@ -1,5 +1,5 @@
 CC     = clang
-CFLAGS = -Weverything -O3
+CFLAGS = -W -Wall
 LINKER = -pthread -lcrypto -liconv
 
 all: main.c tripcode.c

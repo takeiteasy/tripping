@@ -209,11 +209,31 @@ void single_mode() {
 }
 
 void test_mode() {
-	char* test_str = "*驂出s深";
+	// char* test_str = "*驂出s深";
 	iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-	char* trip = gen_trip_sjis(cd, test_str, strlen(test_str));
 
-	printf("%s\n", trip);
-	free(trip);
+#define BUF_MAX 128
+#define MAX_LEN 24
+
+	char buf[BUF_MAX];
+	size_t len = 0;
+	while (!exit_loops) {
+		printf("\e[01;32m>\e[0m ");
+
+		if (fgets(buf, BUF_MAX, stdin) == NULL)
+			break;
+		len = strlen(buf);
+
+		if (len > MAX_LEN) {
+			buf[MAX_LEN - 1] = '\0';
+			len = MAX_LEN - 1;
+		} else {
+			buf[len - 1] = '\0';
+		}
+
+		char* out = gen_trip_sjis(cd, buf, len);
+		printf("\e[01;33m>\e[0m !%s\n", out);
+		free(out);
+	}
 }
 

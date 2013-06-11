@@ -16,7 +16,7 @@ size_t conv_sjis(iconv_t cd, char* src, size_t src_len, char* dst, size_t dst_le
 	return dst_len - d_len;
 }
 
-char* gen_trip_sjis(iconv_t cd, char* src, size_t src_len) {
+char* gen_trip_sjis(iconv_t cd, const char* src, size_t src_len) {
 	char* sjis_ret = malloc(32);
 	src_len = conv_sjis(cd, src, src_len, sjis_ret, 32);
 	free(sjis_ret);
