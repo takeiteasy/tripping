@@ -18,13 +18,10 @@ int main(int argc, const char *argv[]) {
 		else if (strcmp(argv[1], "test") == 0)
 			mode = M_TEST;
 		else if (strcmp(argv[1], "gen") == 0) {
-			mode = M_GEN;
-			if (argc >= 2) {
+			if (argc > 2) {
 				total_gen = (unsigned)atoi(argv[2]);
 				++extra_args;
-			} else {
-				printf("ERROR! Generate mode requires another argument!\n");
-				return EXIT_FAILURE;
+				mode = M_GEN;
 			}
 		} else if (strcmp(argv[1], "mine") == 0) {
 			mode = M_MINE;
@@ -55,10 +52,10 @@ int main(int argc, const char *argv[]) {
 		     min_rnd = 1,
 		     max_rnd = 14,
 		     timeout = 0;
-	bool benchmark       = false,
-	     no_sjis         = false,
-	     mine_timeout    = false,
-	     non_stop_gen    = false;
+	bool       benchmark = false,
+	             no_sjis = false,
+	        mine_timeout = false,
+	        non_stop_gen = false;
 	
 	if (argc > extra_args && mode != M_SINGLE && mode != M_TEST) {
 		for (int i = extra_args; i < argc; ++i) {
@@ -126,7 +123,7 @@ int main(int argc, const char *argv[]) {
 	printf("NON_STOP_GEN: %d\n", non_stop_gen);
 #endif
 
-	long start_time          = get_time();
+	long         start_time  = get_time();
 	unsigned int total_trips = 0;
 	switch (mode) {
 		case M_MINE:
@@ -143,6 +140,7 @@ int main(int argc, const char *argv[]) {
 				printf("WARNING! Total generation amount is 0, enabling non-stop mode!\n");
 				non_stop_gen = true;
 			}
+
 			if (threads > total_gen) {
 				printf("WARNING! Total generation amount is less than total threads! Capping total threads!\n");
 				threads = total_gen;
@@ -225,11 +223,13 @@ void test_mode() {
 		len = strlen(buf);
 
 		if (len > MAX_LEN) {
-			buf[MAX_LEN - 1] = '\0';
+			buf[MAX_LEN   - 1] = '\0';
 			len = MAX_LEN - 1;
-		} else {
+		} else
 			buf[len - 1] = '\0';
-		}
+
+		if (strcmp(buf, "quit") == 0)
+			break;
 
 		char* out = gen_trip_sjis(cd, buf, len);
 		printf("\e[01;33m>\e[0m !%s\n", out);
