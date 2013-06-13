@@ -1,6 +1,6 @@
 #include "random.h"
 
-char* to_utf8 (unsigned short c) {
+char* to_utf8 (unsigned long c) {
 	unsigned long uc = 0x00000000 | (c & 0xFFFF);
 	char* ret        = NULL;
 
@@ -44,6 +44,48 @@ char* to_utf8 (unsigned short c) {
 		ret[5] = 0x80 +  uc        % 0x40;
 		ret[6] = '\0';
 	}
+	return ret;
+}
+
+char* rndstr (unsigned short len) {
+	char* ret = malloc(len);
+	for (int i = 0; i < len; ++i)
+		ret[i] = RAND_ASCII;
+	ret[len] = '\0';
+	return ret;
+}
+
+static range_t ranges[] = {
+	{ 33,    126   }, // Standard ASCII
+	{ 913,   974   }, // Greek
+	{ 1040,  1103  }, // Cryllic
+	{ 8544,  8571  }, // Roman Numerals
+	{ 9312,  9331  }, // Circled Numbers
+	{ 12032, 12245 }, // Kanji
+	{ 12288, 12333 }, // Random characters
+	{ 12353, 12538 }, // Hiragana & Katakana
+	{ 13312, 19893 }, // Kanji
+	{ 19968, 40898 }, // Kanji
+	{ 44032, 55203 }, // Hangul? I think it's called that
+	{ 65296, 65376 }  // Full-width ASCII
+};
+#define TOTAL_RANGES 12
+
+char* rndstr_uni (unsigned short len) {
+	unsigned short n_len = (len + 2) * 4, c_len = 0;
+	char* ret = malloc(n_len);
+
+	for (unsigned short i = 0; i < len; ++i) {
+		unsigned short c_range = RAND_RANGE(0, TOTAL_RANGES - 1);
+		char* tmp = to_utf8(RAND_RANGE(ranges[c_range].min, ranges[c_range].max));
+		size_t tmp_len = strlen(tmp);
+
+		strcat(ret, tmp);
+		free(tmp);
+		c_len += tmp_len;
+	}
+
+	ret[c_len] = '\0';
 	return ret;
 }
 

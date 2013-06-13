@@ -1,9 +1,14 @@
 #include "main.h"
 
-int main(int argc, const char *argv[]) {
+int main (int argc, const char *argv[]) {
 	srand((unsigned int)time(NULL));
 	signal(SIGTERM, signal_handler);
 	signal(SIGINT,  signal_handler);
+
+	char* test = rndstr_uni(10);
+	printf("%s\n", test);
+	free(test);
+	return 0;
 
 	modes_e mode           = M_SINGLE;
 	int extra_args         = 2;
@@ -53,16 +58,16 @@ int main(int argc, const char *argv[]) {
 		     max_rnd = 14,
 		     timeout = 0;
 	bool       benchmark = false,
-	             no_sjis = false,
-	        mine_timeout = false,
-	        non_stop_gen = false;
-	
+		     no_uni = false,
+		mine_timeout = false,
+		non_stop_gen = false;
+
 	if (argc > extra_args && mode != M_SINGLE && mode != M_TEST) {
 		for (int i = extra_args; i < argc; ++i) {
 			if (strcmp("--benchmark", argv[i]) == 0 || strcmp("-b", argv[i]) == 0)
 				benchmark = true;
-			else if (strcmp("--no-sjis", argv[i]) == 0 || strcmp("-ns", argv[i]) == 0)
-				no_sjis = true;
+			else if (strcmp("--no-uni", argv[i]) == 0 || strcmp("-ns", argv[i]) == 0)
+				no_uni = true;
 			else if (strcmp("--dont-stop", argv[i]) == 0 || strcmp("-ds", argv[i]) == 0)
 				non_stop_gen = true;
 			else if (strcmp("--threads", argv[i]) == 0 || strcmp("-pt", argv[i]) == 0) {
@@ -81,7 +86,7 @@ int main(int argc, const char *argv[]) {
 					printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
 					continue;
 				}
-				
+
 				timeout      = (unsigned)atoi(argv[++i]);
 				mine_timeout = true;
 				if (timeout <= 0) {
@@ -117,7 +122,7 @@ int main(int argc, const char *argv[]) {
 	printf("MIN_RND:      %d\n", min_rnd);
 	printf("MAX_RND:      %d\n", max_rnd);
 	printf("BENCHMARK:    %d\n", benchmark);
-	printf("NO_SJIS:      %d\n", no_sjis);
+	printf("NO_UNI:       %d\n", no_uni);
 	printf("MINE_TIMEOUT: %d\n", mine_timeout);
 	printf("TIMEOUT:      %d\n", timeout);
 	printf("NON_STOP_GEN: %d\n", non_stop_gen);
@@ -163,7 +168,7 @@ void print_help() {
 	printf("help!\n");
 }
 
-void signal_handler(int signal) {
+void signal_handler (int signal) {
 	switch (signal) {
 		case SIGTERM:
 			printf(" EXITING: SIGTERM (terminated)\n");
@@ -187,12 +192,12 @@ long get_time() {
 #elif defined PLAT_WIN
 	HANDLE cur_thread   = GetCurrentThread();
 	DWORD_PTR prev_mask = SetThreadAffinityMask(cur_thread, 1);
-	
+
 	static LARGE_INTEGER freq;
 	QueryPerformanceFrequency(&freq);
 	LARGE_INTEGER time;
 	QueryPerformanceCounter(&time);
-	
+
 	SetThreadAffinityMask(cur_thread, prev_mask);
 	return (1000000 * time.QuadPart / freq.QuadPart);
 #else
@@ -231,7 +236,7 @@ void test_mode() {
 		if (strcmp(buf, "quit") == 0)
 			break;
 
-		char* out = gen_trip_sjis(cd, buf, len);
+		char* out = gen_trip_uni(cd, buf, len);
 		printf("\e[01;33m>\e[0m !%s\n", out);
 		free(out);
 	}

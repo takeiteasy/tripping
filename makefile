@@ -1,10 +1,10 @@
 CC     = clang
-CFLAGS = -W -Wall
+CFLAGS = -Weverything -ansi -0s -std=c11
 LINKER = -pthread -lcrypto -liconv
 
-all: main.c tripcode.c
-	$(CC) $(CFLAGS) main.c tripcode.c $(AFLAGS) $(LINKER)
+all: main.c
+	$(CC) $(CFLAGS) *.c $(AFLAGS) $(LINKER)
 
-debug: main.c tripcode.c
-	$(CC) $(CFLAGS) -DDEBUGGING -g main.c tripcode.c$(AFLAGS) $(LINKER)
+debug: main.c
+	$(CC) $(CFLAGS) -DDEBUGGING *.c $(AFLAGS) $(LINKER)
 

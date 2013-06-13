@@ -6,10 +6,10 @@
 #include <openssl/des.h>
 #include <iconv.h>
 
-size_t conv_sjis(iconv_t, char*, size_t, char*, size_t);
-char*  gen_trip_sjis(iconv_t, const char*, size_t);
-char* make_trip(const char*, size_t);
-#define gen_trip_no_sjis(a, b) make_trip(a, b)
+size_t conv_uni (iconv_t, char*, size_t, char*, size_t);
+char*  gen_trip_uni (iconv_t, char*, size_t);
+char* make_trip (const char*, size_t);
+#define gen_trip_no_uni(a, b) make_trip(a, b)
 
 #endif
 
