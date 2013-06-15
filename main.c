@@ -5,11 +5,6 @@ int main (int argc, const char *argv[]) {
 	signal(SIGTERM, signal_handler);
 	signal(SIGINT,  signal_handler);
 
-	char* test = rndstr_uni(10);
-	printf("%s\n", test);
-	free(test);
-	return 0;
-
 	modes_e mode           = M_SINGLE;
 	int extra_args         = 2;
 	unsigned int total_gen = 0;
@@ -208,7 +203,12 @@ long get_time() {
 }
 
 void single_mode() {
-
+	iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+	char* rnd = rndstr_uni(RAND_RANGE(5, 14));
+	char* out = gen_trip_uni(cd, rnd, strlen(rnd));
+	printf("%s => %s\n", rnd, out);
+	free(rnd);
+	free(out);
 }
 
 void test_mode() {

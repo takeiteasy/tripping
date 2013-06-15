@@ -17,10 +17,11 @@ size_t conv_uni (iconv_t cd, char* src, size_t src_len, char* dst, size_t dst_le
 }
 
 char* gen_trip_uni (iconv_t cd, char* src, size_t src_len) {
-	char* uni_ret = malloc(32);
-	src_len = conv_uni(cd, src, src_len, uni_ret, 32);
+	char* uni_ret = malloc(100);
+	src_len = conv_uni(cd, src, src_len, uni_ret, 100);
+	char* ret = make_trip(uni_ret, src_len);
 	free(uni_ret);
-	return make_trip(uni_ret, src_len);
+	return ret;
 }
 
 char* make_trip (const char* str, size_t str_len) {

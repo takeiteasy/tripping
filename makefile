@@ -1,5 +1,5 @@
 CC     = clang
-CFLAGS = -Weverything -ansi -0s -std=c11
+CFLAGS = -Weverything -ansi -0s -std=c99
 LINKER = -pthread -lcrypto -liconv
 
 all: main.c
