@@ -884,10 +884,9 @@ static unsigned short left_overs[] = {
 #define TOTAL_LEFTOVERS 2694
 // }}}
 
-char* rndstr_uni (unsigned short len) {
+char* rndstr_sjis (unsigned short len) {
 	unsigned short n_len = (len + 2) * 4, c_len = 0;
 	char* ret = malloc(n_len);
-	printf("%d - %d\n", TOTAL_RANGES, TOTAL_LEFTOVERS);
 
 	for (unsigned short i = 0; i < len; ++i) {
 		unsigned short c_range = RAND_RANGE(0, TOTAL_RANGES);

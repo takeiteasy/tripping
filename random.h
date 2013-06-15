@@ -8,7 +8,7 @@
 
 char* to_utf8 (unsigned long);
 char* rndstr (unsigned short);
-char* rndstr_uni (unsigned short);
+char* rndstr_sjis (unsigned short);
 
 typedef struct {
 	unsigned short min, max;

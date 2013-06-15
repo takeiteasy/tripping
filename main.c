@@ -53,7 +53,7 @@ int main (int argc, const char *argv[]) {
 		     max_rnd = 14,
 		     timeout = 0;
 	bool       benchmark = false,
-		     no_uni = false,
+		     no_sjis = false,
 		mine_timeout = false,
 		non_stop_gen = false;
 
@@ -61,8 +61,8 @@ int main (int argc, const char *argv[]) {
 		for (int i = extra_args; i < argc; ++i) {
 			if (strcmp("--benchmark", argv[i]) == 0 || strcmp("-b", argv[i]) == 0)
 				benchmark = true;
-			else if (strcmp("--no-uni", argv[i]) == 0 || strcmp("-ns", argv[i]) == 0)
-				no_uni = true;
+			else if (strcmp("--no-sjis", argv[i]) == 0 || strcmp("-ns", argv[i]) == 0)
+				no_sjis = true;
 			else if (strcmp("--dont-stop", argv[i]) == 0 || strcmp("-ds", argv[i]) == 0)
 				non_stop_gen = true;
 			else if (strcmp("--threads", argv[i]) == 0 || strcmp("-pt", argv[i]) == 0) {
@@ -117,7 +117,7 @@ int main (int argc, const char *argv[]) {
 	printf("MIN_RND:      %d\n", min_rnd);
 	printf("MAX_RND:      %d\n", max_rnd);
 	printf("BENCHMARK:    %d\n", benchmark);
-	printf("NO_UNI:       %d\n", no_uni);
+	printf("NO_SJIS:      %d\n", no_sjis);
 	printf("MINE_TIMEOUT: %d\n", mine_timeout);
 	printf("TIMEOUT:      %d\n", timeout);
 	printf("NON_STOP_GEN: %d\n", non_stop_gen);
@@ -204,8 +204,8 @@ long get_time() {
 
 void single_mode() {
 	iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-	char* rnd = rndstr_uni(RAND_RANGE(5, 14));
-	char* out = gen_trip_uni(cd, rnd, strlen(rnd));
+	char* rnd = rndstr_sjis(RAND_RANGE(5, 14));
+	char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
 	printf("%s => %s\n", rnd, out);
 	free(rnd);
 	free(out);
@@ -236,7 +236,7 @@ void test_mode() {
 		if (strcmp(buf, "quit") == 0)
 			break;
 
-		char* out = gen_trip_uni(cd, buf, len);
+		char* out = gen_trip_sjis(cd, buf, len);
 		printf("\e[01;33m>\e[0m !%s\n", out);
 		free(out);
 	}

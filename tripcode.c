@@ -10,17 +10,17 @@ static char salt_table [] =
 	"................................"
 	"................................";
 
-size_t conv_uni (iconv_t cd, char* src, size_t src_len, char* dst, size_t dst_len) {
+size_t conv_sjis (iconv_t cd, char* src, size_t src_len, char* dst, size_t dst_len) {
 	size_t d_len = dst_len;
 	size_t ret = iconv(cd, &src, &src_len, &dst, &d_len);
 	return dst_len - d_len;
 }
 
-char* gen_trip_uni (iconv_t cd, char* src, size_t src_len) {
-	char* uni_ret = malloc(100);
-	src_len = conv_uni(cd, src, src_len, uni_ret, 100);
-	char* ret = make_trip(uni_ret, src_len);
-	free(uni_ret);
+char* gen_trip_sjis (iconv_t cd, char* src, size_t src_len) {
+	char* sjis_ret = malloc(100);
+	src_len = conv_sjis(cd, src, src_len, sjis_ret, 100);
+	char* ret = make_trip(sjis_ret, src_len);
+	free(sjis_ret);
 	return ret;
 }
 
