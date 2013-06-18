@@ -12,7 +12,7 @@ int main (int argc, const char *argv[]) {
 
 	if (argc > 1) {
 		if (strcmp(argv[1], "help") == 0) {
-			print_help();
+			print_help(argv[0]);
 			return EXIT_SUCCESS;
 		}
 		else if (strcmp(argv[1], "test") == 0)
@@ -36,7 +36,7 @@ int main (int argc, const char *argv[]) {
 			}
 		} else {
 			printf("ERROR! Invalid mode entered!\n\n");
-			print_help();
+			print_help(argv[0]);
 			return EXIT_FAILURE;
 		}
 	}
@@ -159,8 +159,8 @@ int main (int argc, const char *argv[]) {
 	return EXIT_SUCCESS;
 }
 
-void print_help() {
-	printf("help!\n");
+void print_help (const char* prog_name) {
+	printf("usage: %s [mode] [options]\n", prog_name);
 }
 
 void signal_handler (int signal) {
@@ -204,11 +204,13 @@ long get_time() {
 
 void single_mode() {
 	iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-	char* rnd = rndstr_sjis(RAND_RANGE(5, 14));
-	char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
-	printf("%s => %s\n", rnd, out);
-	free(rnd);
-	free(out);
+	for (int i = 0; i < 1000; ++i) {
+		char* rnd = rndstr_sjis(RAND_RANGE(5, 14));
+		char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+		printf("%s => %s\n", rnd, out);
+		free(rnd);
+		free(out);
+	}
 }
 
 void test_mode() {
