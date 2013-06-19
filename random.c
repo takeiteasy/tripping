@@ -896,9 +896,11 @@ char* rndstr_sjis (unsigned short len) {
 	for (unsigned short i = 0; i < len; ++i) {
 		char* tmp;
 		unsigned short sjis_or_ascii = RAND_RANGE(0, 10);
+
 		if (sjis_or_ascii <= 7) {
-			tmp = malloc(1);
+			tmp = malloc(2);
 			tmp[0] = RAND_ASCII;
+			tmp[1] = '\0';
 		} else {
 			unsigned short c_range = RAND_RANGE(0, TOTAL_RANGES);
 			if (c_range == TOTAL_RANGES)
@@ -906,11 +908,10 @@ char* rndstr_sjis (unsigned short len) {
 			else
 				tmp = to_utf8(RAND_RANGE(ranges[c_range].min, ranges[c_range].max));
 		}
-		size_t tmp_len = strlen(tmp);
 
 		strcat(ret, tmp);
 		free(tmp);
-		c_len += tmp_len;
+		c_len += strlen(tmp);
 	}
 
 	ret[c_len] = '\0';

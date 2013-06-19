@@ -4,6 +4,7 @@ int main (int argc, const char *argv[]) {
 	srand((unsigned int)time(NULL));
 	signal(SIGTERM, signal_handler);
 	signal(SIGINT,  signal_handler);
+	iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
 
 	modes_e mode           = M_SINGLE;
 	int extra_args         = 2;
@@ -53,56 +54,71 @@ int main (int argc, const char *argv[]) {
 		     max_rnd = 14,
 		     timeout = 0;
 	bool       benchmark = false,
-		     no_sjis = false,
-		mine_timeout = false,
-		non_stop_gen = false;
+		   no_sjis = false,
+		   mine_timeout = false,
+		   non_stop_gen = false;
 
-	if (argc > extra_args && mode != M_SINGLE && mode != M_TEST) {
-		for (int i = extra_args; i < argc; ++i) {
-			if (strcmp("--benchmark", argv[i]) == 0 || strcmp("-b", argv[i]) == 0)
-				benchmark = true;
-			else if (strcmp("--no-sjis", argv[i]) == 0 || strcmp("-ns", argv[i]) == 0)
-				no_sjis = true;
-			else if (strcmp("--dont-stop", argv[i]) == 0 || strcmp("-ds", argv[i]) == 0)
-				non_stop_gen = true;
-			else if (strcmp("--threads", argv[i]) == 0 || strcmp("-pt", argv[i]) == 0) {
-				if ((i + 1) > (argc - 1)) {
-					printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
-					continue;
+	if (argc > extra_args && mode != M_SINGLE) {
+		if (mode == M_TEST) {
+			if (argc - extra_args == 1) {
+				char* out = gen_trip_sjis(cd, argv[extra_args], strlen(argv[extra_args]));
+				printf("%s\n", out);
+				free(out);
+			} else {
+				for (int i = extra_args; i < argc; ++i) {
+					char* out = gen_trip_sjis(cd, argv[i], strlen(argv[i]));
+					printf("%s => %s\n", argv[i], out);
+					free(out);
 				}
-
-				threads = (unsigned)atoi(argv[++i]);
-				if (threads <= 1) {
-					printf("WARNING! Invalid number of threads entered! Using single-threading!\n");
-					threads = 1;
-				}
-			} else if (strcmp("--timeout", argv[i]) == 0 || strcmp("-t", argv[i]) == 0) {
-				if ((i + 1) > (argc - 1)) {
-					printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
-					continue;
-				}
-
-				timeout      = (unsigned)atoi(argv[++i]);
-				mine_timeout = true;
-				if (timeout <= 0) {
-					printf("WARNING! Invalid timeout entered! Disabling timeout!\n");
-					timeout      = 0;
-					mine_timeout = false;
-				}
-			} else if (strcmp("--min-rnd", argv[i]) == 0 || strcmp("-min", argv[i]) == 0) {
-				if ((i + 1) > (argc - 1)) {
-					printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
-					continue;
-				}
-				min_rnd = (unsigned)atoi(argv[++i]);
-			} else if (strcmp("--max-rnd", argv[i]) == 0 || strcmp("-max", argv[i]) == 0) {
-				if ((i + 1) > (argc - 1)) {
-					printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
-					continue;
-				}
-				max_rnd = (unsigned)atoi(argv[++i]);
 			}
-			else printf("WARNING! %s is not a valid argument!\n", argv[i]);
+			mode = M_NOMODE;
+		} else {
+			for (int i = extra_args; i < argc; ++i) {
+				if (strcmp("--benchmark", argv[i]) == 0 || strcmp("-b", argv[i]) == 0)
+					benchmark = true;
+				else if (strcmp("--no-sjis", argv[i]) == 0 || strcmp("-ns", argv[i]) == 0)
+					no_sjis = true;
+				else if (strcmp("--dont-stop", argv[i]) == 0 || strcmp("-ds", argv[i]) == 0)
+					non_stop_gen = true;
+				else if (strcmp("--threads", argv[i]) == 0 || strcmp("-pt", argv[i]) == 0) {
+					if ((i + 1) > (argc - 1)) {
+						printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
+						continue;
+					}
+
+					threads = (unsigned)atoi(argv[++i]);
+					if (threads <= 1) {
+						printf("WARNING! Invalid number of threads entered! Using single-threading!\n");
+						threads = 1;
+					}
+				} else if (strcmp("--timeout", argv[i]) == 0 || strcmp("-t", argv[i]) == 0) {
+					if ((i + 1) > (argc - 1)) {
+						printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
+						continue;
+					}
+
+					timeout      = (unsigned)atoi(argv[++i]);
+					mine_timeout = true;
+					if (timeout <= 0) {
+						printf("WARNING! Invalid timeout entered! Disabling timeout!\n");
+						timeout      = 0;
+						mine_timeout = false;
+					}
+				} else if (strcmp("--min-rnd", argv[i]) == 0 || strcmp("-min", argv[i]) == 0) {
+					if ((i + 1) > (argc - 1)) {
+						printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
+						continue;
+					}
+					min_rnd = (unsigned)atoi(argv[++i]);
+				} else if (strcmp("--max-rnd", argv[i]) == 0 || strcmp("-max", argv[i]) == 0) {
+					if ((i + 1) > (argc - 1)) {
+						printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
+						continue;
+					}
+					max_rnd = (unsigned)atoi(argv[++i]);
+				}
+				else printf("WARNING! %s is not a valid argument!\n", argv[i]);
+			}
 		}
 	}
 
@@ -148,6 +164,9 @@ int main (int argc, const char *argv[]) {
 			break;
 		case M_SINGLE:
 			single_mode();
+			break;
+		case M_NOMODE:
+		default:
 			break;
 	}
 
@@ -204,13 +223,11 @@ long get_time() {
 
 void single_mode() {
 	iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-	for (int i = 0; i < 1000; ++i) {
-		char* rnd = rndstr_sjis(RAND_RANGE(5, 14));
-		char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
-		printf("%s => %s\n", rnd, out);
-		free(rnd);
-		free(out);
-	}
+	char* rnd = rndstr_sjis(RAND_RANGE(5, 14));
+	char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+	printf("%s => %s\n", rnd, out);
+	free(rnd);
+	free(out);
 }
 
 void test_mode() {

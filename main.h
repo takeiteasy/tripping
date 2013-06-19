@@ -21,7 +21,8 @@ typedef enum {
 	M_TEST,
 	M_GEN,
 	M_MINE,
-	M_SINGLE
+	M_SINGLE,
+	M_NOMODE
 } modes_e;
 
 /* General functions */
