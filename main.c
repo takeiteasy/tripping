@@ -4,7 +4,6 @@ int main (int argc, const char *argv[]) {
 	srand((unsigned int)time(NULL));
 	signal(SIGTERM, signal_handler);
 	signal(SIGINT,  signal_handler);
-	iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
 
 	modes_e mode           = M_SINGLE;
 	int extra_args         = 2;
@@ -43,23 +42,24 @@ int main (int argc, const char *argv[]) {
 	}
 
 #if defined DEBUGGING
-	printf("MODE:       %d\n", mode);
-	printf("EXTRA_ARGS: %d\n", extra_args);
-	printf("TOTAL_GEN:  %d\n", total_gen);
-	printf("MINE_REGEX: %s\n\n", mine_regex);
+	printf("MODE:		%d\n", mode);
+	printf("EXTRA_ARGS:	%d\n", extra_args);
+	printf("TOTAL_GEN:	%d\n", total_gen);
+	printf("MINE_REGEX:	%s\n\n", mine_regex);
 #endif
 
-	unsigned int threads = 1,
-		     min_rnd = 1,
-		     max_rnd = 14,
-		     timeout = 0;
-	bool       benchmark = false,
-		   no_sjis = false,
-		   mine_timeout = false,
-		   non_stop_gen = false;
+	unsigned int threads	= 1,
+		     min_rnd	= 1,
+		     max_rnd	= 14,
+		     timeout	= 0;
+	bool       benchmark	= false,
+		   no_sjis	= false,
+		   mine_timeout	= false,
+		   non_stop_gen	= false;
 
 	if (argc > extra_args && mode != M_SINGLE) {
 		if (mode == M_TEST) {
+			iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
 			if (argc - extra_args == 1) {
 				char* out = gen_trip_sjis(cd, argv[extra_args], strlen(argv[extra_args]));
 				printf("%s\n", out);
@@ -71,6 +71,7 @@ int main (int argc, const char *argv[]) {
 					free(out);
 				}
 			}
+			iconv_close(cd);
 			mode = M_NOMODE;
 		} else {
 			for (int i = extra_args; i < argc; ++i) {
@@ -155,11 +156,11 @@ int main (int argc, const char *argv[]) {
 			if (total_gen <= 0) {
 				printf("WARNING! Total generation amount is 0, enabling non-stop mode!\n");
 				non_stop_gen = true;
-			}
-
-			if (threads > total_gen) {
-				printf("WARNING! Total generation amount is less than total threads! Capping total threads!\n");
-				threads = total_gen;
+			} else {
+				if (threads > total_gen) {
+					printf("WARNING! Total generation amount is less than total threads! Capping total threads!\n");
+					threads = total_gen;
+				}
 			}
 			break;
 		case M_SINGLE:
@@ -228,10 +229,10 @@ void single_mode() {
 	printf("%s => %s\n", rnd, out);
 	free(rnd);
 	free(out);
+	iconv_close(cd);
 }
 
 void test_mode() {
-	// char* test_str = "*驂出s深";
 	iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
 
 #define BUF_MAX 128
@@ -252,12 +253,14 @@ void test_mode() {
 		} else
 			buf[len - 1] = '\0';
 
-		if (strcmp(buf, "quit") == 0)
+		if (strcmp(buf, "exit") == 0)
 			break;
 
 		char* out = gen_trip_sjis(cd, buf, len);
 		printf("\e[01;33m>\e[0m !%s\n", out);
 		free(out);
 	}
+
+	iconv_close(cd);
 }
 
