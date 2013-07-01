@@ -5,7 +5,7 @@
 #include <time.h>
 #include "tripcode.h"
 #include "random.h"
-#include "lib/threads/threads.h"
+#include "../lib/threads/threads.h"
 
 #if ((__APPLE__ & __MACH__) || macintosh || Macintosh)
 #	define PLAT_OSX
