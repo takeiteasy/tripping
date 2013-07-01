@@ -12,7 +12,7 @@ static char salt_table [] =
 
 size_t conv_sjis (iconv_t cd, char* src, size_t src_len, char* dst, size_t dst_len) {
 	size_t d_len = dst_len;
-	size_t ret = iconv(cd, &src, &src_len, &dst, &d_len);
+	iconv(cd, &src, &src_len, &dst, &d_len);
 	return dst_len - d_len;
 }
 

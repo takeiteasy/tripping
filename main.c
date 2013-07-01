@@ -1,6 +1,18 @@
 #include "main.h"
 
+void test_func(void* arg) {
+	for (int i = 0; i < 100; ++i)
+		printf("%d\n", i);
+}
+
 int main (int argc, const char *argv[]) {
+	thrd_t t[4];
+	for (int i = 0; i < 4; ++i)
+		thrd_create(&t[i], test_func, NULL);
+	for (int j = 0; j < 4; ++j)
+		thrd_join(t[j], NULL);
+	return 0;
+
 	srand((unsigned int)time(NULL));
 	signal(SIGTERM, signal_handler);
 	signal(SIGINT,  signal_handler);
