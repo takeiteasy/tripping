@@ -67,9 +67,6 @@ void* search_thread(void*);
 bool  thread_quit(pthread_mutex_t*);
 void  signal_handle(int signal);
 
-bool kbhit(void);
-int  getch(void);
-
 #define DEF_MIN_RND_LEN 3
 #define DEF_MAX_RND_LEN 15
 #define RAND_STR_LEN(a, b) ((rand() % ((b + 1) - a)) + a)
