@@ -1,6 +1,6 @@
 CC      = clang
-CFLAGS  = -Weverything -ansi -0s -std=c11
-LINKER  = -pthread -lcrypto -liconv
+CFLAGS  = -Weverything -ansi -0s -std=gnu99
+LINKER  = -lrt -pthread -lcrypto -liconv
 INC     = src/*.c lib/threads/threads_posix.c
 
 all: src/main.c
