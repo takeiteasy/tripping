@@ -1,3 +1,0 @@
-[submodule "lib/threads"]
-	path = lib/threads
-	url = https://gist.github.com/5897507.git
