@@ -37,3 +37,9 @@ void test_mode (void);
 
 static volatile sig_atomic_t exit_loops = 0;
 
+typedef struct {
+    int total, min, max;
+} gen_thread_arg;
+
+void* gen_thread (void*);
+
