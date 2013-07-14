@@ -1,5 +1,5 @@
 CC      = clang
-CFLAGS  = -Weverything -ansi -02 -std=gnu99
+CFLAGS  = -Weverything -02 -std=gnu99
 LINKER  = -lrt -pthread -lcrypto -liconv
 INC     = src/*.c lib/threads/threads_posix.c
 

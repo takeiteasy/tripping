@@ -18,20 +18,19 @@ int main (int argc, const char *argv[]) {
         else if (strcmp(argv[1], "test") == 0)
             mode = M_TEST;
         else if (strcmp(argv[1], "gen") == 0) {
-            if (argc > 2) {
-                total_gen = (unsigned)atoi(argv[2]);
-                ++extra_args;
-                mode = M_GEN;
-            }
+            total_gen = (argc > 2 ? (unsigned)atoi(argv[2]) : 0);
+            ++extra_args;
+            mode = M_GEN;
         } else if (strcmp(argv[1], "mine") == 0) {
-            mode = M_MINE;
-            if (argc >= 2) {
+            if (argc > 2) {
                 size_t arg_len = strlen(argv[2]);
                 mine_regex = malloc(arg_len);
                 strncpy(mine_regex, argv[2], arg_len);
                 ++extra_args;
+                mode = M_MINE;
             } else {
-                printf("ERROR! Mine mode requires another argument!\n");
+                printf("ERROR! Mine mode requires another argument\n\n");
+                print_help(argv[0]);
                 return EXIT_FAILURE;
             }
         } else {
@@ -48,14 +47,14 @@ int main (int argc, const char *argv[]) {
     printf("MINE_REGEX: %s\n\n", mine_regex);
 #endif
 
-    unsigned int threads    = 1,
-                 min_rnd    = 1,
-                 max_rnd    = 14,
-                 timeout    = 0;
-    bool       benchmark    = false,
-               no_sjis      = false,
-               mine_timeout = false,
-               non_stop_gen = false;
+    unsigned int total_threads  = 1,
+                 min_rnd        = 1,
+                 max_rnd        = 14,
+                 timeout        = 0;
+    bool         benchmark      = false,
+                 no_sjis        = false,
+                 mine_timeout   = false,
+                 non_stop_gen   = false;
 
     if (argc > extra_args && mode != M_SINGLE) {
         if (mode == M_TEST) {
@@ -87,10 +86,10 @@ int main (int argc, const char *argv[]) {
                         continue;
                     }
 
-                    threads = (unsigned)atoi(argv[++i]);
-                    if (threads <= 1) {
+                    total_threads = (unsigned)atoi(argv[++i]);
+                    if (total_threads <= 1) {
                         printf("WARNING! Invalid number of threads entered! Using single-threading!\n");
-                        threads = 1;
+                        total_threads = 1;
                     }
                 } else if (strcmp("--timeout", argv[i]) == 0 || strcmp("-t", argv[i]) == 0) {
                     if ((i + 1) > (argc - 1)) {
@@ -130,7 +129,7 @@ int main (int argc, const char *argv[]) {
     }
 
 #if defined DEBUGGING
-    printf("THREADS:      %d\n", threads);
+    printf("THREADS:      %d\n", total_threads);
     printf("MIN_RND:      %d\n", min_rnd);
     printf("MAX_RND:      %d\n", max_rnd);
     printf("BENCHMARK:    %d\n", benchmark);
@@ -142,34 +141,57 @@ int main (int argc, const char *argv[]) {
 
     long         start_time  = get_time();
     unsigned int total_trips = 0;
-    switch (mode) {
-        case M_MINE:
-            if (strlen(mine_regex) <= 0) {
-                printf("ERROR! Blank regex passed!\n");
-                return EXIT_FAILURE;
+    if (mode == M_MINE) {
+        if (strlen(mine_regex) <= 0) {
+            printf("ERROR! Blank regex passed!\n");
+            return EXIT_FAILURE;
+        }
+    } else if (mode == M_TEST)
+        test_mode();
+    else if (mode == M_GEN) {
+        if (total_gen <= 0) {
+            printf("WARNING! Total generation amount is 0, enabling non-stop mode!\n");
+            non_stop_gen = true;
+        } else {
+            if (total_threads > total_gen) {
+                printf("WARNING! Total generation amount is less than total threads! Capping total threads!\n");
+                total_threads = total_gen;
             }
-            break;
-        case M_TEST:
-            test_mode();
-            break;
-        case M_GEN:
-            if (total_gen <= 0) {
-                printf("WARNING! Total generation amount is 0, enabling non-stop mode!\n");
-                non_stop_gen = true;
+
+            if (total_threads == 1) {
+                gen_mode_arg t_arg = { total_gen, min_rnd, max_rnd };
+                t_arg.total = total_gen;
+                gen_mode((void*)&t_arg);
             } else {
-                if (threads > total_gen) {
-                    printf("WARNING! Total generation amount is less than total threads! Capping total threads!\n");
-                    threads = total_gen;
+                thrd_t* t = malloc(total_threads * sizeof(thrd_t*));
+                total_trips = total_gen;
+
+                int trips_per_thread    = (total_gen / total_threads);
+                int first_thread_total  = trips_per_thread;
+                int trips_total_test    = (total_gen - (trips_per_thread * total_threads));
+                if (trips_total_test)
+                    first_thread_total += trips_total_test;
+
+                gen_mode_arg* t_args = malloc(total_threads * sizeof(gen_mode_arg*));
+                for (int k = 0; k < total_threads; ++k) {
+                    t_args[k].total = (k == 0 ? first_thread_total : trips_per_thread);
+                    t_args[k].min   = min_rnd;
+                    t_args[k].max   = max_rnd;
                 }
+
+                for (int i = 0; i < total_threads; ++i) {
+                    thrd_create(&t[i], gen_mode, (void*)&t_args[i]);
+                }
+                for (int j = 0; j < total_threads; ++j)
+                    thrd_join(t[j], NULL);
+
+                free(t);
+                free(t_args);
             }
-            break;
-        case M_SINGLE:
-            single_mode();
-            break;
-        case M_NOMODE:
-        default:
-            break;
+        }
     }
+    else
+        single_mode();
 
     if (benchmark) {
         float exec_time = ((get_time() - start_time) / 1000000.f);
@@ -264,8 +286,18 @@ void test_mode() {
     iconv_close(cd);
 }
 
-void* gen_thread (void* arg) {
-    gen_thread_arg t_arg = *((gen_thread_arg*)arg);
-    printf("%d - %d to %d", t_arg.total, t_arg.min, t_arg.max);
+bool thread_quit (mtx_t* mtx) {
+    switch (mtx_trylock(mtx)) {
+        case thrd_busy:
+            return false;
+        default:
+            return true;
+    }
+}
+
+int gen_mode (void* arg) {
+    gen_mode_arg t_arg = *((gen_mode_arg*)arg);
+    printf("total: %d min: %d max: %d\n", t_arg.total, t_arg.min, t_arg.max);
+    return t_arg.total;
 }
 
