@@ -49,7 +49,7 @@ char* to_utf8 (unsigned long c) {
 }
 
 /* Generates random ASCII string */
-char* rndstr (unsigned short len) {
+char* rndstr_ascii (unsigned short len) {
     char* ret = malloc(len);
     for (int i = 0; i < len; ++i)
         ret[i] = RAND_ASCII;

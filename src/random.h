@@ -7,7 +7,7 @@
 #define RAND_ASCII RAND_RANGE(33, 126)
 
 char* to_utf8 (unsigned long);
-char* rndstr (unsigned short);
+char* rndstr_ascii (unsigned short);
 char* rndstr_sjis (unsigned short);
 
 typedef struct {

@@ -82,7 +82,7 @@ char* make_trip (const char* str, size_t str_len) {
     DES_fcrypt(dst, salt, des_dst);
     free(dst);
 
-    /* Return tripcode - last 11 characters */
+    /* Return tripcode - first 11 characters */
     char* ret = malloc(11);
     memcpy(ret, des_dst + 3, 11);
     free(des_dst);

@@ -38,8 +38,10 @@ void test_mode (void);
 static volatile sig_atomic_t exit_loops = 0;
 
 typedef struct {
-    int total, min, max;
+    unsigned int total, min, max;
 } gen_mode_arg;
 
-int gen_mode (void*);
+int gen_mode_sjis (void*);
+int gen_mode_ascii (void*);
+static int (*gen_mode)(void*);
 
