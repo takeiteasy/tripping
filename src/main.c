@@ -20,7 +20,8 @@ int main (int argc, const char *argv[]) {
             mode = M_TEST;
         else if (strcmp(argv[1], "gen") == 0) {
             total_gen = (argc > 2 ? (unsigned)atoi(argv[2]) : 0);
-            ++extra_args;
+            if (total_gen && argc > 2)
+                ++extra_args;
             mode = M_GEN;
         } else if (strcmp(argv[1], "mine") == 0) {
             if (argc > 2) {
@@ -53,8 +54,7 @@ int main (int argc, const char *argv[]) {
                  max_rnd        = 14,
                  timeout        = 0;
     bool         benchmark      = false,
-                 ascii        = false,
-                 non_stop_gen   = false;
+                 ascii          = false;
 
     if (argc > extra_args && mode != M_SINGLE) {
         if (mode == M_TEST) {
@@ -78,18 +78,21 @@ int main (int argc, const char *argv[]) {
                     benchmark = true;
                 else if (strcmp("--ascii", argv[i]) == 0 || strcmp("-a", argv[i]) == 0)
                     ascii = true;
-                else if (strcmp("--dont-stop-me-now", argv[i]) == 0 || strcmp("-dsmn", argv[i]) == 0)
-                    non_stop_gen = true;
                 else if (strcmp("--threads", argv[i]) == 0 || strcmp("-t", argv[i]) == 0) {
                     if ((i + 1) > (argc - 1)) {
                         printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
                         continue;
                     }
 
-                    total_threads = (unsigned)atoi(argv[++i]);
-                    if (total_threads <= 1) {
-                        printf("WARNING! Invalid number of threads entered! Using single-threading!\n");
-                        total_threads = 1;
+                    if (mode = M_GEN) {
+                        printf("WARNING! Threads are disabled in generate mode!\n");
+                        i += 1;
+                    } else {
+                        total_threads = (unsigned)atoi(argv[++i]);
+                        if (total_threads <= 1) {
+                            printf("WARNING! Invalid number of threads entered! Using single-threading!\n");
+                            total_threads = 1;
+                        }
                     }
                 } else if (strcmp("--timeout", argv[i]) == 0 || strcmp("-t", argv[i]) == 0) {
                     if ((i + 1) > (argc - 1)) {
@@ -126,6 +129,9 @@ int main (int argc, const char *argv[]) {
         max_rnd = 14;
     }
 
+    if (timeout && !(mode == M_MINE || (mode == M_GEN && total_gen == 0)))
+        printf("WARNIG! Timed mode is only enabled in mining and non-stop generate mode!");
+
 #if defined DEBUGGING
     printf("THREADS:      %d\n",   total_threads);
     printf("MIN_RND:      %d\n",   min_rnd);
@@ -138,7 +144,6 @@ int main (int argc, const char *argv[]) {
 
     long         start_time  = get_time();
     unsigned int total_trips = 0;
-    /* TODO: Mining mode */
     if (mode == M_MINE) {
         if (strlen(mine_regex) <= 0) {
             printf("ERROR! Blank regex passed!\n");
@@ -149,49 +154,33 @@ int main (int argc, const char *argv[]) {
     else if (mode == M_GEN) {
         if (total_gen <= 0) {
             printf("WARNING! Total generation amount is 0, enabling non-stop mode!\n");
-            non_stop_gen = true;
+
+            void (*nstop_gen_mode)(void*) = (ascii ? nstop_gen_mode_ascii : nstop_gen_mode_sjis);
+            nstop_gen_arg t_arg = { min_rnd, max_rnd, NULL };
+
+            mtx_t t_mtx;
+            mtx_init(&t_mtx, NULL);
+            mtx_lock(&t_mtx);
+            t_arg.mtx = &t_mtx;
+
+            thrd_t t;
+            thrd_create(&t, nstop_gen_mode, (void*)&t_arg);
+
+            while (!exit_loops);
+            mtx_unlock(&t_mtx);
+
+            void* tmp = NULL;
+            thrd_join(t, &tmp);
+            total_gen = *(int*)tmp;
+            free(tmp);
         } else {
-            gen_mode = (ascii ? gen_mode_ascii : gen_mode_sjis);
-
-            if (total_threads > total_gen) {
-                printf("WARNING! Total generation amount is less than total threads! Capping total threads!\n");
-                total_threads = total_gen;
-            }
-
-            if (total_threads == 1) {
-                gen_mode_arg t_arg = { total_gen, min_rnd, max_rnd };
-                t_arg.total = total_gen;
-                gen_mode((void*)&t_arg);
-            } else {
-                thrd_t* t = malloc(total_threads * sizeof(thrd_t*));
-                total_trips = total_gen;
-
-                int trips_per_thread    = (total_gen / total_threads);
-                int first_thread_total  = trips_per_thread;
-                int trips_total_test    = (total_gen - (trips_per_thread * total_threads));
-                if (trips_total_test)
-                    first_thread_total += trips_total_test;
-
-                gen_mode_arg* t_args = malloc(total_threads * sizeof(gen_mode_arg*));
-                for (int k = 0; k < total_threads; ++k) {
-                    t_args[k].total = (k == 0 ? first_thread_total : trips_per_thread);
-                    t_args[k].min   = min_rnd;
-                    t_args[k].max   = max_rnd;
-                }
-
-                for (int i = 0; i < total_threads; ++i) {
-                    thrd_create(&t[i], gen_mode, (void*)&t_args[i]);
-                }
-                for (int j = 0; j < total_threads; ++j)
-                    thrd_join(t[j], NULL);
-
-                free(t);
-                free(t_args);
-            }
+            void (*gen_mode)(int, int, int) = (ascii ? gen_mode_ascii : gen_mode_sjis);
+            gen_mode(total_gen, min_rnd, max_rnd);
+            total_trips = total_gen;
         }
     }
     else if (mode == M_SINGLE)
-        single_mode();
+        single_mode(min_rnd, max_rnd, ascii);
 
     if (benchmark) {
         float exec_time = ((get_time() - start_time) / 1000000.f);
@@ -243,17 +232,17 @@ long get_time() {
 #endif
 }
 
-void single_mode() {
+void single_mode (int rnd_min, int rnd_max, bool ascii_only) {
     iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-    char* rnd = rndstr_sjis(RAND_RANGE(5, 14));
-    char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+    unsigned int len = RAND_RANGE(rnd_min, rnd_max);
+    char* rnd = (ascii_only ? rndstr_ascii(len) : rndstr_sjis(len));
+    char* out = (ascii_only ? gen_trip_ascii(rnd, strlen(rnd)) : gen_trip_sjis(cd, rnd, strlen(rnd)));
     printf("%s => %s\n", rnd, out);
     free(rnd);
     free(out);
     iconv_close(cd);
 }
 
-/* TODO: Windows ANSI colour codes */
 void test_mode() {
     iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
 
@@ -262,6 +251,7 @@ void test_mode() {
 
     char buf[BUF_MAX];
     size_t len = 0;
+
     while (!exit_loops) {
 #if defined PLAT_WIN
         printf("> ");
@@ -298,31 +288,69 @@ bool thread_quit (mtx_t* mtx) {
     return !(mtx_trylock(mtx) == thrd_busy);
 }
 
-int gen_mode_sjis (void* arg) {
-    gen_mode_arg t_arg = *((gen_mode_arg*)arg);
-    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+void gen_mode_ascii (int total, int rnd_min, int rnd_max) {
+    for (int i = 0; i < total; ++i) {
+        char* rnd = rndstr_ascii(RAND_RANGE(rnd_min, rnd_max));
+        char* out = gen_trip_ascii(rnd, strlen(rnd));
 
-    for (int i = 0; i < t_arg.total; ++i) {
-        char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
         printf("%s => %s\n", rnd, out);
         free(rnd);
         free(out);
+    }
+}
+
+void gen_mode_sjis (int total, int rnd_min, int rnd_max) {
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+    for (int i = 0; i < total; ++i) {
+        char* rnd = rndstr_sjis(RAND_RANGE(rnd_min, rnd_max));
+        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+
+        printf("%s => %s\n", rnd, out);
+        free(rnd);
+        free(out);
+    }
+    iconv_close(cd);
+}
+
+void* nstop_gen_mode_ascii (void* arg) {
+    nstop_gen_arg t_arg = *((nstop_gen_arg*)arg);
+    int  total_gen = 0;
+
+    while (!thread_quit(t_arg.mtx)) {
+        char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
+        char* out = gen_trip_ascii(rnd, strlen(rnd));
+
+        printf("%s => %s\n", rnd, out);
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    int* ret = malloc(total_gen);
+    *ret = total_gen;
+    return ret;
+}
+
+void* nstop_gen_mode_sjis (void* arg) {
+    nstop_gen_arg t_arg = *((nstop_gen_arg*)arg);
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+    int  total_gen = 0;
+
+    while (!thread_quit(t_arg.mtx)) {
+        char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
+        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+
+        printf("%s => %s\n", rnd, out);
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
     }
 
     iconv_close(cd);
-    return 0;
-}
-
-int gen_mode_ascii (void* arg) {
-    gen_mode_arg t_arg = *((gen_mode_arg*)arg);
-    for (int i = 0; i < t_arg.total; ++i) {
-        char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_ascii(rnd, strlen(rnd));
-        printf("%s => %s\n", rnd, out);
-        free(rnd);
-        free(out);
-    }
-    return 0;
+    int* ret = malloc(total_gen);
+    *ret = total_gen;
+    return ret;
 }
 
