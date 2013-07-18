@@ -57,8 +57,8 @@ char* rndstr_ascii (unsigned short len) {
     return ret;
 }
 
-// Ranges arrays {{{
 /* SJIS Character ranges */
+// Ranges arrays {{{
 static range_t ranges[] = {
     { 33,    126   }, { 167,   168   }, { 176,   177   },
     { 913,   929   }, { 931,   937   }, { 945,   961   },
@@ -582,8 +582,8 @@ static range_t ranges[] = {
 #define TOTAL_RANGES 1556
 // }}}
 
-// Left-over array {{{
 /* SJIS characters not in ranges */
+// Left-over array {{{
 static unsigned short left_overs[] = {
     180,   182,   197,   215,   247,   1025,  1105,  8208,  8213,
     8240,  8251,  8451,  8470,  8481,  8658,  8660,  8704,  8715,

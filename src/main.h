@@ -33,14 +33,14 @@ void signal_handler (int);
 long get_time (void);
 
 /* Mode functions */
-void single_mode (int, int, bool);
+void single_mode (unsigned int, unsigned int, bool);
 void test_mode (void);
 
-void gen_mode_ascii (int, int, int);
-void gen_mode_sjis (int, int, int);
+void gen_mode_ascii (unsigned int, unsigned int, unsigned int);
+void gen_mode_sjis (unsigned int, unsigned int, unsigned int);
 
 typedef struct {
-    int min, max;
+    unsigned int min, max;
     mtx_t* mtx;
 } nstop_gen_arg;
 
