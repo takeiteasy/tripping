@@ -731,14 +731,15 @@ static range_t ranges[] = {
 /* Generates random SJIS/ASCII string */
 char* rndstr_sjis (unsigned short len) {
     unsigned short n_len = (len + 2) * 4, c_len = 0;
-    char* ret = malloc(n_len);
+    char* ret = (char*)malloc(n_len);
+    ret[0] = '\0';
 
     for (unsigned short i = 0; i < len; ++i) {
         char* tmp;
         unsigned short sjis_or_ascii = RAND_RANGE(0, 10);
 
         if (sjis_or_ascii <= 7) {
-            tmp = malloc(2);
+            tmp = malloc(1);
             tmp[0] = RAND_ASCII;
             tmp[1] = '\0';
         } else {
