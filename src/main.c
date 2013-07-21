@@ -168,11 +168,7 @@ int main (int argc, const char *argv[]) {
 
             while (!exit_loops);
             mtx_unlock(&t_mtx);
-
-            void* tmp = NULL;
-            thrd_join(t, &tmp);
-            total_gen = *(unsigned int*)tmp;
-            free(tmp);
+            thrd_join(t, (void**)&total_trips);
         } else {
             void (*gen_mode)(int, int, int) = (ascii ? gen_mode_ascii : gen_mode_sjis);
             gen_mode(total_gen, min_rnd, max_rnd);
@@ -314,8 +310,7 @@ void gen_mode_sjis (unsigned int total, unsigned int rnd_min, unsigned int rnd_m
 
 void* nstop_gen_mode_ascii (void* arg) {
     nstop_gen_arg t_arg = *((nstop_gen_arg*)arg);
-    int  total_gen = 0;
-    int* ret = malloc(sizeof(int));
+    int total_gen = 0;
 
     while (!thread_quit(t_arg.mtx)) {
         char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
@@ -328,15 +323,13 @@ void* nstop_gen_mode_ascii (void* arg) {
         total_gen += 1;
     }
 
-    *ret = total_gen;
-    return ret;
+    return (void*)total_gen;
 }
 
 void* nstop_gen_mode_sjis (void* arg) {
     nstop_gen_arg t_arg = *((nstop_gen_arg*)arg);
     iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-    int  total_gen = 0;
-    int* ret = malloc(sizeof(int));
+    int total_gen = 0;
 
     while (!thread_quit(t_arg.mtx)) {
         char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
@@ -350,7 +343,6 @@ void* nstop_gen_mode_sjis (void* arg) {
     }
 
     iconv_close(cd);
-    *ret = total_gen;
-    return ret;
+    return (void*)total_gen;
 }
 

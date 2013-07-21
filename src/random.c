@@ -731,7 +731,7 @@ static range_t ranges[] = {
 /* Generates random SJIS/ASCII string */
 char* rndstr_sjis (unsigned short len) {
     unsigned short n_len = (len + 2) * 4, c_len = 0;
-    char* ret = (char*)malloc(n_len);
+    char* ret = malloc(n_len);
     ret[0] = '\0';
 
     for (unsigned short i = 0; i < len; ++i) {
