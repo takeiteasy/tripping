@@ -49,6 +49,10 @@ puts  "// Ranges arrays {{{"
 puts  "static range_t ranges[] = {"
 print "    "
 
+# I wrote this quickly a while ago
+# I have no idea what is going on
+# with the final this loop either
+
 # Loop through what is left of the original list and make ranges
 x, y, t, l = 0, 0, 0, 0
 a.each_with_index do |z, j|
