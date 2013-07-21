@@ -906,7 +906,7 @@ char* rndstr_sjis (unsigned short len) {
             if (c_range == TOTAL_RANGES)
                 tmp = to_utf8(left_overs[RAND_RANGE(0, TOTAL_LEFTOVERS)]);
             else
-                tmp = to_utf8(RAND_RANGE(ranges[c_range].min, ranges[c_range].max));
+                tmp = to_utf8(left_overs[RAND_RANGE(0, TOTAL_LEFTOVERS)]);
         }
 
         strcat(ret, tmp);
