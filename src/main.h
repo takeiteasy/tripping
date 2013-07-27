@@ -19,11 +19,19 @@
 #   define PLAT_NIX
 #endif
 
+#if defined PLAT_WIN
+#   define SLEEP(x) Sleep((x) / 1000)
+#else
+#   include <unistd.h>
+#   define SLEEP(x) sleep((x))
+#endif
+
 typedef enum {
     M_TEST,
     M_GEN,
     M_MINE,
     M_SINGLE,
+    M_BENCH,
     M_NOMODE
 } modes_e;
 
@@ -31,6 +39,7 @@ typedef enum {
 void print_help (const char*);
 void signal_handler (int);
 long get_time (void);
+void u_sleep (unsigned int);
 
 /* Mode functions */
 void single_mode (unsigned int, unsigned int, bool);
@@ -46,6 +55,17 @@ typedef struct {
 
 void* nstop_gen_mode_ascii (void*);
 void* nstop_gen_mode_sjis (void*);
+
+typedef struct {
+    unsigned int min, max, target;
+    mtx_t* mtx;
+} bench_arg;
+
+void bench_mode_ascii (void*);
+void bench_mode_sjis (void*);
+
+void* nstop_bench_mode_ascii (void*);
+void* nstop_bench_mode_sjis (void*);
 
 static volatile sig_atomic_t exit_loops = 0;
 

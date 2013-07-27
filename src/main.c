@@ -10,20 +10,32 @@ int main (int argc, const char *argv[]) {
     unsigned int total_gen  = 0;
     char*        mine_regex = NULL;
 
-    /* TODO: Add "bench" mode, different to "--benchmark" */
+    unsigned int total_threads  = 1,
+                 min_rnd        = 2,
+                 max_rnd        = 14,
+                 timeout        = 0;
+    bool         benchmark      = false,
+                 ascii          = false;
+
     if (argc > 1) {
         if (strcmp(argv[1], "help") == 0) {
             print_help(argv[0]);
             return EXIT_SUCCESS;
         }
-        else if (strcmp(argv[1], "test") == 0)
+        else if (!strcmp(argv[1], "test"))
             mode = M_TEST;
-        else if (strcmp(argv[1], "gen") == 0) {
+        else if (!strcmp(argv[1], "gen")) {
             total_gen = (argc > 2 ? (unsigned)atoi(argv[2]) : 0);
             if (total_gen && argc > 2)
                 ++extra_args;
             mode = M_GEN;
-        } else if (strcmp(argv[1], "mine") == 0) {
+        } else if (!strcmp(argv[1], "bench")){
+            total_gen = (argc > 2 ? (unsigned)atoi(argv[2]) : 0);
+            if (total_gen && argc > 2)
+                ++extra_args;
+            mode = M_BENCH;
+            benchmark = true;
+        } else if (!strcmp(argv[1], "mine")) {
             if (argc > 2) {
                 size_t arg_len = strlen(argv[2]);
                 mine_regex = malloc(arg_len);
@@ -49,13 +61,6 @@ int main (int argc, const char *argv[]) {
     printf("MINE_REGEX: %s\n\n", mine_regex);
 #endif
 
-    unsigned int total_threads  = 1,
-                 min_rnd        = 2,
-                 max_rnd        = 14,
-                 timeout        = 0;
-    bool         benchmark      = false,
-                 ascii          = false;
-
     if (argc > extra_args && mode != M_SINGLE) {
         if (mode == M_TEST) {
             iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
@@ -74,11 +79,11 @@ int main (int argc, const char *argv[]) {
             mode = M_NOMODE;
         } else {
             for (int i = extra_args; i < argc; ++i) {
-                if (strcmp("--benchmark", argv[i]) == 0 || strcmp("-b", argv[i]) == 0)
+                if (!strcmp("--benchmark", argv[i]) || !strcmp("-b", argv[i]))
                     benchmark = true;
-                else if (strcmp("--ascii", argv[i]) == 0 || strcmp("-a", argv[i]) == 0)
+                else if (!strcmp("--ascii", argv[i]) || !strcmp("-a", argv[i]))
                     ascii = true;
-                else if (strcmp("--threads", argv[i]) == 0 || strcmp("-t", argv[i]) == 0) {
+                else if (!strcmp("--threads", argv[i]) || !strcmp("-t", argv[i])) {
                     if ((i + 1) > (argc - 1)) {
                         printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
                         continue;
@@ -130,7 +135,7 @@ int main (int argc, const char *argv[]) {
     }
 
     if (timeout && !(mode == M_MINE || (mode == M_GEN && total_gen == 0)))
-        printf("WARNIG! Timed mode is only enabled in mining and non-stop generate mode!");
+        printf("WARNIG! Timed mode is only enabled in mining and non-stop generate mode!\n");
 
 #if defined DEBUGGING
     printf("THREADS:      %d\n",   total_threads);
@@ -139,7 +144,6 @@ int main (int argc, const char *argv[]) {
     printf("BENCHMARK:    %d\n",   benchmark);
     printf("ASCII_ONLY:   %d\n",   ascii);
     printf("TIMEOUT:      %d\n",   timeout);
-    printf("NON_STOP_GEN: %d\n\n", non_stop_gen);
 #endif
 
     long         start_time  = get_time();
@@ -166,7 +170,11 @@ int main (int argc, const char *argv[]) {
             thrd_t t;
             thrd_create(&t, nstop_gen_mode, (void*)&t_arg);
 
-            while (!exit_loops);
+            if (timeout)
+                SLEEP(timeout);
+            else
+                while (!exit_loops);
+
             mtx_unlock(&t_mtx);
             thrd_join(t, (void**)&total_trips);
         } else {
@@ -174,8 +182,43 @@ int main (int argc, const char *argv[]) {
             gen_mode(total_gen, min_rnd, max_rnd);
             total_trips = total_gen;
         }
-    }
-    else if (mode == M_SINGLE)
+    } else if (mode == M_BENCH) {
+        if (total_gen <= 0) {
+            printf("WARNING! Total benchmark generation amount is 0, enabling non-stop mode!\n");
+
+            void (*nstop_bench_mode)(void*) = (ascii ? nstop_bench_mode_ascii : nstop_bench_mode_sjis);
+            bench_arg t_arg = { min_rnd, max_rnd, total_gen, NULL };
+        } else {
+            void (*bench_mode)(void*) = (ascii ? bench_mode_ascii : bench_mode_sjis);
+            bench_arg t_arg = { min_rnd, max_rnd, total_gen, NULL };
+
+            if (total_threads == 1) {
+                bench_mode((void*)&t_arg);
+            } else {
+                int trips_per_thread = total_gen / total_threads;
+                int first_thread_total = trips_per_thread;
+                if ((trips_per_thread * total_threads) != total_gen)
+                    first_thread_total += (total_gen - (trips_per_thread * total_threads));
+
+                thrd_t* t = malloc(total_threads * sizeof(thrd_t*));
+                bench_arg t_args[total_threads];
+                for (int i = 0; i < total_threads; ++i) {
+                    t_args[i].target = (!i ? first_thread_total : trips_per_thread);
+                    t_args[i].min    = min_rnd;
+                    t_args[i].max    = max_rnd;
+                }
+
+                for (int j = 0; j < total_threads; ++j)
+                    thrd_create(&t[j], bench_mode, (void*)&t_args[j]);
+                for (int k = 0; k < total_threads; ++k)
+                    thrd_join(t[k], NULL);
+
+                free(t);
+            }
+            total_trips = total_gen;
+        }
+    } else if (mode == M_MINE) {
+    } else if (mode == M_SINGLE)
         single_mode(min_rnd, max_rnd, ascii);
 
     if (benchmark) {
@@ -187,19 +230,20 @@ int main (int argc, const char *argv[]) {
 }
 
 void print_help (const char* prog_name) {
+    printf("http://www.github.com/badassmofo/tripping\n");
     printf("usage: %s [mode] [options]\n", prog_name);
 }
 
 void signal_handler (int signal) {
     switch (signal) {
         case SIGTERM:
-            printf(" EXITING: SIGTERM (terminated)\n");
+            printf("EXITING! SIGTERM (terminated)\n");
             break;
         case SIGINT:
-            printf(" EXITING: SIGINT (interrupted)\n");
+            printf("EXITING! SIGINT (interrupted)\n");
             break;
         default:
-            printf(" EXITING: UNKNOWN (%d)\n", signal);
+            printf("EXITING! UNKNOWN (%d)\n", signal);
     }
     exit_loops = 1;
 }
@@ -344,5 +388,35 @@ void* nstop_gen_mode_sjis (void* arg) {
 
     iconv_close(cd);
     return (void*)total_gen;
+}
+
+void bench_mode_ascii (void* arg) {
+    bench_arg t_arg = *((bench_arg*)arg);
+    for (int i = 0; i < t_arg.target; ++i) {
+        char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
+        char* out = gen_trip_ascii(rnd, strlen(rnd));
+        free(rnd);
+        free(out);
+    }
+}
+
+void bench_mode_sjis (void* arg) {
+    bench_arg t_arg = *((bench_arg*)arg);
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+    for (int i = 0; i < t_arg.target; ++i) {
+        char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
+        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+        free(rnd);
+        free(out);
+    }
+    iconv_close(cd);
+}
+
+void* nstop_bench_mode_ascii (void* arg) {
+    bench_arg t_arg = *((bench_arg*)arg);
+}
+
+void* nstop_bench_mode_sjis (void* arg) {
+    bench_arg t_arg = *((bench_arg*)arg);
 }
 

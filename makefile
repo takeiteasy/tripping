@@ -7,8 +7,5 @@ all: src/main.c
 	$(CC) $(CFLAGS) $(INC) $(LINKER)
 
 debug: src/main.c
-	$(CC) $(CFLAGS) -g -DDEBUGGING $(INC) $(LINKER)
-
-test: tools/test.c
-	$(CC) -g tools/test.c $(CFLAGS)
+	$(CC) $(CFLAGS) -DDEBUGGING $(INC) $(LINKER)
 
