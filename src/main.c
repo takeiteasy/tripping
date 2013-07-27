@@ -187,7 +187,30 @@ int main (int argc, const char *argv[]) {
             printf("WARNING! Total benchmark generation amount is 0, enabling non-stop mode!\n");
 
             void (*nstop_bench_mode)(void*) = (ascii ? nstop_bench_mode_ascii : nstop_bench_mode_sjis);
-            bench_arg t_arg = { min_rnd, max_rnd, total_gen, NULL };
+            bench_arg t_arg = { min_rnd, max_rnd, 0, NULL };
+
+            mtx_t t_mtx;
+            mtx_init(&t_mtx, NULL);
+            mtx_lock(&t_mtx);
+            t_arg.mtx = &t_mtx;
+
+            thrd_t* t = malloc(total_threads * sizeof(thrd_t*));
+            for (int i = 0; i < total_threads; ++i)
+                thrd_create(&t[i], nstop_bench_mode, (void*)&t_arg);
+
+            if (timeout)
+                SLEEP(timeout);
+            else
+                while (!exit_loops);
+
+            mtx_unlock(&t_mtx);
+            for (int j = 0; j < total_threads; ++j) {
+                int tmp_ret = 0;
+                thrd_join(t[j], (void**)&tmp_ret);
+                total_trips += tmp_ret;
+            }
+
+            free(t);
         } else {
             void (*bench_mode)(void*) = (ascii ? bench_mode_ascii : bench_mode_sjis);
             bench_arg t_arg = { min_rnd, max_rnd, total_gen, NULL };
@@ -237,13 +260,13 @@ void print_help (const char* prog_name) {
 void signal_handler (int signal) {
     switch (signal) {
         case SIGTERM:
-            printf("EXITING! SIGTERM (terminated)\n");
+            printf(" EXITING! SIGTERM (terminated)\n");
             break;
         case SIGINT:
-            printf("EXITING! SIGINT (interrupted)\n");
+            printf(" EXITING! SIGINT (interrupted)\n");
             break;
         default:
-            printf("EXITING! UNKNOWN (%d)\n", signal);
+            printf(" EXITING! UNKNOWN (%d)\n", signal);
     }
     exit_loops = 1;
 }
@@ -325,7 +348,14 @@ void test_mode() {
 }
 
 bool thread_quit (mtx_t* mtx) {
-    return !(mtx_trylock(mtx) == thrd_busy);
+    switch (mtx_trylock(mtx)) {
+        case thrd_success:
+            mtx_unlock(mtx);
+            return true;
+        case thrd_busy:
+            return false;
+    }
+    return true;
 }
 
 void gen_mode_ascii (unsigned int total, unsigned int rnd_min, unsigned int rnd_max) {
@@ -414,9 +444,35 @@ void bench_mode_sjis (void* arg) {
 
 void* nstop_bench_mode_ascii (void* arg) {
     bench_arg t_arg = *((bench_arg*)arg);
+    int total_gen = 0;
+
+    while (!thread_quit(t_arg.mtx)) {
+        char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
+        char* out = gen_trip_ascii(rnd, strlen(rnd));
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    return (void*)total_gen;
 }
 
 void* nstop_bench_mode_sjis (void* arg) {
     bench_arg t_arg = *((bench_arg*)arg);
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+    int total_gen = 0;
+
+    while (!thread_quit(t_arg.mtx)) {
+        char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
+        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    iconv_close(cd);
+    return (void*)total_gen;
 }
 
