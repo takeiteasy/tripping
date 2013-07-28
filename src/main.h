@@ -7,7 +7,9 @@
 #include "tripcode.h"
 #include "random.h"
 #include "../lib/threads/threads.h"
+
 #include <pcre.h>
+#define MVEC_LEN 14
 
 #if ((__APPLE__ & __MACH__) || macintosh || Macintosh)
 #   define PLAT_OSX
@@ -71,8 +73,13 @@ void* nstop_bench_mode_sjis (void*);
 typedef struct {
     unsigned int min, max;
     const char* search;
+    size_t search_len;
+    bool caseless;
     mtx_t* mtx;
 } mine_arg;
+
+void str_to_lower (char*, const char*, size_t);
+bool str_contains (const char*, size_t, const char*, size_t);
 
 void* mine_mode_ascii (void*);
 void* mine_mode_ascii_regexp (void*);

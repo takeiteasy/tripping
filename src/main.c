@@ -1,14 +1,5 @@
 #include "main.h"
 
-/* TODO
- *  Implement mining mode
- *  Optimize random string generation
- *      - Pass pointer to char, return length
- *      - Avoid having to call strlen
- *  Finish print_help
- *  Comments for reference
- */
-
 int main (int argc, const char *argv[]) {
     srand((unsigned int)time(NULL));
     signal(SIGTERM, signal_handler);
@@ -25,7 +16,8 @@ int main (int argc, const char *argv[]) {
                  timeout        = 0;
     bool         benchmark      = false,
                  ascii          = false,
-                 mine_is_regex  = false;
+                 mine_is_regex  = false,
+                 caseless       = false;
 
     if (argc > 1) {
         if (strcmp(argv[1], "help") == 0) {
@@ -105,6 +97,8 @@ int main (int argc, const char *argv[]) {
                     benchmark = true;
                 else if (!strcmp("--ascii", argv[i]) || !strcmp("-a", argv[i]))
                     ascii = true;
+                else if (!strcmp("--caseless", argv[i]) || !strcmp("-i", argv[i]))
+                    caseless = true;
                 else if (!strcmp("--threads", argv[i]) || !strcmp("-th", argv[i])) {
                     if ((i + 1) > (argc - 1)) {
                         printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
@@ -144,8 +138,8 @@ int main (int argc, const char *argv[]) {
                         continue;
                     }
                     max_rnd = (unsigned)atoi(argv[++i]);
-                }
-                else printf("WARNING! %s is not a valid argument!\n", argv[i]);
+                } else
+                    printf("WARNING! %s is not a valid argument!\n", argv[i]);
             }
         }
     }
@@ -166,6 +160,7 @@ int main (int argc, const char *argv[]) {
     printf("BENCHMARK:    %d\n",   benchmark);
     printf("ASCII_ONLY:   %d\n",   ascii);
     printf("TIMEOUT:      %d\n",   timeout);
+    printf("CASELESS:     %d\n\n", caseless);
 #endif
 
     long         start_time  = get_time();
@@ -182,7 +177,10 @@ int main (int argc, const char *argv[]) {
         void (*mine_mode)(void*) = (ascii ?
                 (mine_is_regex ? mine_mode_ascii_regexp : mine_mode_ascii) :
                 (mine_is_regex ? mine_mode_sjis_regex : mine_mode_sjis));
-        mine_arg t_arg = { min_rnd, max_rnd, mine_test, NULL };
+
+        mine_arg t_arg = { min_rnd, max_rnd,
+                           mine_test, strlen(mine_test),
+                           caseless, NULL };
 
         mtx_t t_mtx;
         mtx_init(&t_mtx, NULL);
@@ -528,15 +526,119 @@ void* nstop_bench_mode_sjis (void* arg) {
     return (void*)total_gen;
 }
 
+void str_to_lower(char* dst, const char* src, size_t src_len) {
+    for (size_t i = 0; i < src_len; ++i)
+        dst[i] = (src[i] >= 65 && src[i] <= 90 ? src[i] + 32 : src[i]);
+    dst[src_len] = '\0';
+}
+
+bool str_contains (const char* a, size_t a_len, const char* b, size_t b_len) {
+    if (b_len > a_len || !a || !b)
+        return false;
+
+    for (size_t i = 0; i < a_len; ++i) {
+        if (a[i] == b[0]) {
+            bool match = true;
+            for (size_t j = 1; j < b_len; ++j)
+                if (a[i + j] != b[j])
+                    match = false;
+            if (match)
+                return true;
+        }
+    }
+    return false;
+}
+
 void* mine_mode_ascii (void* arg) {
+    mine_arg t_arg = *((mine_arg*)arg);
+    int total_gen = 0;
+
+    while (!thread_quit(t_arg.mtx)) {
+        char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
+        char* out = gen_trip_ascii(rnd, strlen(rnd));
+
+        if (str_contains(out, 11, t_arg.search, strlen(t_arg.search)))
+            printf("%s => %s\n", rnd, out);
+
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    return (void*)total_gen;
 }
 
 void* mine_mode_ascii_regexp (void* arg) {
-    puts("here!");
+    mine_arg t_arg = *((mine_arg*)arg);
+    int total_gen = 0;
+
+    const char* err;
+    int err_off, mvec[MVEC_LEN];
+    pcre* r = pcre_compile(t_arg.search, PCRE_DOTALL, &err, &err_off, NULL);
+
+    while (!thread_quit(t_arg.mtx)) {
+        char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
+        char* out = gen_trip_ascii(rnd, strlen(rnd));
+
+        int rc = pcre_exec(r, NULL, out, 11, 0, 0, mvec, MVEC_LEN);
+        if (rc >= 0)
+            printf("%s => %s\n", rnd, out);
+
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    return (void*)total_gen;
 }
 
 void* mine_mode_sjis (void* arg) {
+    mine_arg t_arg = *((mine_arg*)arg);
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+    int total_gen = 0;
+
+    while (!thread_quit(t_arg.mtx)) {
+        char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
+        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+
+        if (str_contains(out, 11, t_arg.search, strlen(t_arg.search)))
+            printf("%s => %s\n", rnd, out);
+
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    iconv_close(cd);
+    return (void*)total_gen;
 }
 
 void* mine_mode_sjis_regex (void* arg) {
+    mine_arg t_arg = *((mine_arg*)arg);
+    int total_gen = 0;
+
+    const char* err;
+    int err_off, mvec[MVEC_LEN];
+    pcre* r = pcre_compile(t_arg.search, PCRE_DOTALL, &err, &err_off, NULL);
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+
+    while (!thread_quit(t_arg.mtx)) {
+        char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
+        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+
+        int rc = pcre_exec(r, NULL, out, 11, 0, 0, mvec, MVEC_LEN);
+        if (rc >= 0)
+            printf("%s => %s\n", rnd, out);
+
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    iconv_close(cd);
+    return (void*)total_gen;
 }
