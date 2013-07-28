@@ -1,6 +1,11 @@
-CC     = clang
-CFLAGS = -Weverything -O3
-LINKER = -pthread -lcrypto
+CC      = clang
+CFLAGS  = -Weverything -02 -std=gnu99
+LINKER  = -pthread -lcrypto -liconv -lpcre
+INC     = src/*.c lib/threads/threads_posix.c
 
-xtrip:
-	$(CC) $(CFLAGS) main.c -o xtrip $(LINKER)
+all: src/main.c
+	$(CC) $(CFLAGS) $(INC) $(LINKER)
+
+debug: src/main.c
+	$(CC) $(CFLAGS) -DDEBUGGING $(INC) $(LINKER)
+
