@@ -307,7 +307,35 @@ int main (int argc, const char *argv[]) {
 
 void print_help (const char* prog_name) {
     printf("http://www.github.com/badassmofo/tripping\n");
-    printf("usage: %s [mode] [options]\n", prog_name);
+    printf("usage: %s [mode] [option] [options]\n\n", prog_name);
+    printf("modes\n");
+    printf("  single -> If no arguments are entered, it'll spit out a random tripcode\n");
+    printf("  test   -> Interactive test mode, or test specified trips\n");
+    printf("            %s test these tripcodes or %s test\n", prog_name, prog_name);
+    printf("  gen    -> Generate a specified amount of tripcodes, or until quit\n");
+    printf("            %s gen 100 or %s gen\n", prog_name, prog_name);
+    printf("  mine   -> Try and bruteforce match a tripcode using regex or just substring search\n");
+    printf("            %s mine /^test/ or %s mine test\n", prog_name, prog_name);
+    printf("  bench  -> Benchmark mode, same as gen without printing out the trips\n");
+    printf("  help   -> Prints this message!\n");
+    printf("\noptions\n");
+    printf("  --benchmark/-b -> Benchmark operation (different to bench mode)\n");
+    printf("  --ascii/-a     -> ASCII only mode, don't use SJIS at all\n");
+    printf("  --caseless/-i  -> Caseless matching (mine mode only)\n");
+    printf("  --threads/-th  -> Specify amount of threads to use\n");
+    printf("  --timeout/-to  -> Specify timeout for non-stop gen/bench and mine (secs)\n");
+    printf("  --min-rnd/-mi  -> Specify the minimum random string length\n");
+    printf("  --max-rnd/-mx  -> Specify the maximum random string length\n");
+    printf("\nexamples:\n");
+    printf("  %s mine /^hello/ -a -b -i\n", prog_name);
+    printf("    Search for tripcodes that begin with \"hello\", only using ASCII\n");
+    printf("    but ignore the case and benchmark it.\n\n");
+    printf("  %s mine /^(\d+)$/ -th 8\n", prog_name);
+    printf("    Search for tripcodes that is just a number using 8 threads.\n\n");
+    printf("  %s gen -to 10 -mi 5 -mx 10\n", prog_name);
+    printf("    Generate random tripcodes for 10 seconds using the range 5 to 10\n\n");
+    printf("  %s test all of these tripcodes for me\n", prog_name);
+    printf("    Turn \"all\", \"of\", \"these\", \"tripcodes\", \"for\" and \"me\" into tripcodes\n");
 }
 
 void signal_handler (int signal) {
@@ -647,7 +675,6 @@ void* mine_mode_sjis (void* arg) {
         str_to_lower(tmp, t_arg.search, search_len);
         free(t_arg.search);
         t_arg.search = tmp;
-        printf("%s\n", t_arg.search);
     }
     bool (*substr)(const char*, size_t, const char*, size_t) = (t_arg.caseless ? str_contains_caseless : str_contains);
 
