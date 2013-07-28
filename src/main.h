@@ -45,7 +45,7 @@ long get_time (void);
 void u_sleep (unsigned int);
 
 /* Mode functions */
-void single_mode (unsigned int, unsigned int, bool);
+void single_mode (void);
 void test_mode (void);
 
 void gen_mode_ascii (unsigned int, unsigned int, unsigned int);
