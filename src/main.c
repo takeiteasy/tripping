@@ -1,5 +1,11 @@
 #include "main.h"
 
+/* TODO
+ *  Optimize make_trip
+ *  Add comments for reference
+ *  Finish print_help & update README
+ */
+
 int main (int argc, const char *argv[]) {
     srand((unsigned int)time(NULL));
     signal(SIGTERM, signal_handler);
@@ -115,7 +121,7 @@ int main (int argc, const char *argv[]) {
                             total_threads = 1;
                         }
                     }
-                } else if (!strcmp("--timeout", argv[i]) || !strcmp("-ti", argv[i])) {
+                } else if (!strcmp("--timeout", argv[i]) || !strcmp("-to", argv[i])) {
                     if ((i + 1) > (argc - 1)) {
                         printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
                         continue;
@@ -345,8 +351,12 @@ long get_time() {
 void single_mode (unsigned int rnd_min, unsigned int rnd_max, bool ascii_only) {
     iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
     unsigned int len = RAND_RANGE(rnd_min, rnd_max);
-    char* rnd = (ascii_only ? rndstr_ascii(len) : rndstr_sjis(len));
-    char* out = (ascii_only ? gen_trip_ascii(rnd, strlen(rnd)) : gen_trip_sjis(cd, rnd, strlen(rnd)));
+    char* rnd = NULL;
+    if (ascii_only)
+        rnd = rndstr_ascii(len);
+    else
+        len = rndstr_sjis(len, rnd);
+    char* out = (ascii_only ? gen_trip_ascii(rnd, len) : gen_trip_sjis(cd, rnd, len));
     printf("%s => %s\n", rnd, out);
     free(rnd);
     free(out);
@@ -407,8 +417,9 @@ bool thread_quit (mtx_t* mtx) {
 
 void gen_mode_ascii (unsigned int total, unsigned int rnd_min, unsigned int rnd_max) {
     for (int i = 0; i < total; ++i) {
-        char* rnd = rndstr_ascii(RAND_RANGE(rnd_min, rnd_max));
-        char* out = gen_trip_ascii(rnd, strlen(rnd));
+        size_t len = RAND_RANGE(rnd_min, rnd_max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
 
         printf("%s => %s\n", rnd, out);
         free(rnd);
@@ -419,8 +430,10 @@ void gen_mode_ascii (unsigned int total, unsigned int rnd_min, unsigned int rnd_
 void gen_mode_sjis (unsigned int total, unsigned int rnd_min, unsigned int rnd_max) {
     iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
     for (int i = 0; i < total; ++i) {
-        char* rnd = rndstr_sjis(RAND_RANGE(rnd_min, rnd_max));
-        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+        size_t len = RAND_RANGE(rnd_min, rnd_max);
+        char*  rnd = malloc(len * 5);
+               len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
 
         printf("%s => %s\n", rnd, out);
         free(rnd);
@@ -434,8 +447,9 @@ void* nstop_gen_mode_ascii (void* arg) {
     int total_gen = 0;
 
     while (!thread_quit(t_arg.mtx)) {
-        char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_ascii(rnd, strlen(rnd));
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
 
         printf("%s => %s\n", rnd, out);
         free(rnd);
@@ -453,8 +467,10 @@ void* nstop_gen_mode_sjis (void* arg) {
     int total_gen = 0;
 
     while (!thread_quit(t_arg.mtx)) {
-        char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = malloc(len * 5);
+               len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
 
         printf("%s => %s\n", rnd, out);
         free(rnd);
@@ -470,8 +486,9 @@ void* nstop_gen_mode_sjis (void* arg) {
 void bench_mode_ascii (void* arg) {
     bench_arg t_arg = *((bench_arg*)arg);
     for (int i = 0; i < t_arg.target; ++i) {
-        char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_ascii(rnd, strlen(rnd));
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
         free(rnd);
         free(out);
     }
@@ -481,8 +498,10 @@ void bench_mode_sjis (void* arg) {
     bench_arg t_arg = *((bench_arg*)arg);
     iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
     for (int i = 0; i < t_arg.target; ++i) {
-        char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = malloc(len * 5);
+               len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
         free(rnd);
         free(out);
     }
@@ -494,8 +513,9 @@ void* nstop_bench_mode_ascii (void* arg) {
     int total_gen = 0;
 
     while (!thread_quit(t_arg.mtx)) {
-        char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_ascii(rnd, strlen(rnd));
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
         free(rnd);
         free(out);
 
@@ -511,8 +531,10 @@ void* nstop_bench_mode_sjis (void* arg) {
     int total_gen = 0;
 
     while (!thread_quit(t_arg.mtx)) {
-        char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = malloc(len * 5);
+               len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
         free(rnd);
         free(out);
 
@@ -569,8 +591,9 @@ void* mine_mode_ascii (void* arg) {
     bool (*substr)(const char*, size_t, const char*, size_t) = (t_arg.caseless ? str_contains_caseless : str_contains);
 
     while (!thread_quit(t_arg.mtx)) {
-        char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_ascii(rnd, strlen(rnd));
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
 
         if (substr(out, 11, t_arg.search, search_len))
             printf("%s => %s\n", rnd, out);
@@ -596,8 +619,9 @@ void* mine_mode_ascii_regexp (void* arg) {
     pcre* r = pcre_compile(t_arg.search, options, &err, &err_off, NULL);
 
     while (!thread_quit(t_arg.mtx)) {
-        char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_ascii(rnd, strlen(rnd));
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
 
         int rc = pcre_exec(r, NULL, out, 11, 0, 0, mvec, MVEC_LEN);
         if (rc >= 0)
@@ -628,10 +652,12 @@ void* mine_mode_sjis (void* arg) {
     bool (*substr)(const char*, size_t, const char*, size_t) = (t_arg.caseless ? str_contains_caseless : str_contains);
 
     while (!thread_quit(t_arg.mtx)) {
-        char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = malloc(len * 5);
+               len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
 
-        if (substr(out, 11, t_arg.search, strlen(t_arg.search)))
+        if (substr(out, 11, t_arg.search, search_len))
             printf("%s => %s\n", rnd, out);
 
         free(rnd);
@@ -657,8 +683,10 @@ void* mine_mode_sjis_regex (void* arg) {
     iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
 
     while (!thread_quit(t_arg.mtx)) {
-        char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
-        char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = malloc(len * 5);
+               len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
 
         int rc = pcre_exec(r, NULL, out, 11, 0, 0, mvec, MVEC_LEN);
         if (rc >= 0)
@@ -673,3 +701,4 @@ void* mine_mode_sjis_regex (void* arg) {
     iconv_close(cd);
     return (void*)total_gen;
 }
+

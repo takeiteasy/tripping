@@ -729,13 +729,12 @@ static range_t ranges[] = {
 // }}}
 
 /* Generates random SJIS/ASCII string */
-char* rndstr_sjis (unsigned short len) {
-    unsigned short n_len = (len + 2) * 4, c_len = 0;
-    char* ret = malloc(n_len);
-    ret[0] = '\0';
+size_t rndstr_sjis (unsigned short len, char* dst) {
+    unsigned short c_len = 0;
+    dst[0] = '\0';
 
     for (unsigned short i = 0; i < len; ++i) {
-        char* tmp;
+        char* tmp = NULL;
         unsigned short sjis_or_ascii = RAND_RANGE(0, 10);
 
         if (sjis_or_ascii <= 7) {
@@ -750,12 +749,12 @@ char* rndstr_sjis (unsigned short len) {
                 tmp = to_utf8(left_overs[RAND_RANGE(0, TOTAL_LEFTOVERS)]);
         }
 
-        strcat(ret, tmp);
+        strcat(dst, tmp);
         c_len += strlen(tmp);
         free(tmp);
     }
 
-    ret[c_len] = '\0';
-    return ret;
+    dst[c_len] = '\0';
+    return c_len;
 }
 
