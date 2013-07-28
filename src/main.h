@@ -7,6 +7,7 @@
 #include "tripcode.h"
 #include "random.h"
 #include "../lib/threads/threads.h"
+#include <pcre.h>
 
 #if ((__APPLE__ & __MACH__) || macintosh || Macintosh)
 #   define PLAT_OSX
@@ -66,6 +67,18 @@ void bench_mode_sjis (void*);
 
 void* nstop_bench_mode_ascii (void*);
 void* nstop_bench_mode_sjis (void*);
+
+typedef struct {
+    unsigned int min, max;
+    const char* search;
+    mtx_t* mtx;
+} mine_arg;
+
+void* mine_mode_ascii (void*);
+void* mine_mode_ascii_regexp (void*);
+
+void* mine_mode_sjis (void*);
+void* mine_mode_sjis_regex (void*);
 
 static volatile sig_atomic_t exit_loops = 0;
 

@@ -1,5 +1,14 @@
 #include "main.h"
 
+/* TODO
+ *  Implement mining mode
+ *  Optimize random string generation
+ *      - Pass pointer to char, return length
+ *      - Avoid having to call strlen
+ *  Finish print_help
+ *  Comments for reference
+ */
+
 int main (int argc, const char *argv[]) {
     srand((unsigned int)time(NULL));
     signal(SIGTERM, signal_handler);
@@ -8,14 +17,15 @@ int main (int argc, const char *argv[]) {
     modes_e      mode       = M_SINGLE;
     int          extra_args = 2;
     unsigned int total_gen  = 0;
-    char*        mine_regex = NULL;
+    char*        mine_test  = NULL;
 
     unsigned int total_threads  = 1,
                  min_rnd        = 2,
                  max_rnd        = 14,
                  timeout        = 0;
     bool         benchmark      = false,
-                 ascii          = false;
+                 ascii          = false,
+                 mine_is_regex  = false;
 
     if (argc > 1) {
         if (strcmp(argv[1], "help") == 0) {
@@ -38,8 +48,19 @@ int main (int argc, const char *argv[]) {
         } else if (!strcmp(argv[1], "mine")) {
             if (argc > 2) {
                 size_t arg_len = strlen(argv[2]);
-                mine_regex = malloc(arg_len);
-                strncpy(mine_regex, argv[2], arg_len);
+                char* tmp_str = malloc(arg_len);
+                strncpy(tmp_str, argv[2], arg_len);
+                tmp_str[arg_len] = '\0';
+                mine_is_regex = (tmp_str[0] == 47 && tmp_str[arg_len - 1] == 47);
+
+                if (mine_is_regex) {
+                    char* tmp_substr = malloc(arg_len - 2);
+                    memcpy(tmp_substr, tmp_str + 1, arg_len - 2);
+                    free(tmp_str);
+                    mine_test = tmp_substr;
+                } else
+                    mine_test = tmp_str;
+
                 ++extra_args;
                 mode = M_MINE;
             } else {
@@ -55,10 +76,11 @@ int main (int argc, const char *argv[]) {
     }
 
 #if defined DEBUGGING
-    printf("MODE:       %d\n", mode);
-    printf("EXTRA_ARGS: %d\n", extra_args);
-    printf("TOTAL_GEN:  %d\n", total_gen);
-    printf("MINE_REGEX: %s\n\n", mine_regex);
+    printf("MODE:       %d\n",   mode);
+    printf("EXTRA_ARGS: %d\n",   extra_args);
+    printf("TOTAL_GEN:  %d\n",   total_gen);
+    printf("MINE_TEST:  %s\n",   mine_test);
+    printf("MINE_REGEX: %d\n\n", mine_is_regex);
 #endif
 
     if (argc > extra_args && mode != M_SINGLE) {
@@ -83,7 +105,7 @@ int main (int argc, const char *argv[]) {
                     benchmark = true;
                 else if (!strcmp("--ascii", argv[i]) || !strcmp("-a", argv[i]))
                     ascii = true;
-                else if (!strcmp("--threads", argv[i]) || !strcmp("-t", argv[i])) {
+                else if (!strcmp("--threads", argv[i]) || !strcmp("-th", argv[i])) {
                     if ((i + 1) > (argc - 1)) {
                         printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
                         continue;
@@ -99,7 +121,7 @@ int main (int argc, const char *argv[]) {
                             total_threads = 1;
                         }
                     }
-                } else if (strcmp("--timeout", argv[i]) == 0 || strcmp("-t", argv[i]) == 0) {
+                } else if (!strcmp("--timeout", argv[i]) || !strcmp("-ti", argv[i])) {
                     if ((i + 1) > (argc - 1)) {
                         printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
                         continue;
@@ -110,13 +132,13 @@ int main (int argc, const char *argv[]) {
                         printf("WARNING! Invalid timeout entered! Disabling timeout!\n");
                         timeout  = 0;
                     }
-                } else if (strcmp("--min-rnd", argv[i]) == 0 || strcmp("-mi", argv[i]) == 0) {
+                } else if (!strcmp("--min-rnd", argv[i]) || !strcmp("-mi", argv[i])) {
                     if ((i + 1) > (argc - 1)) {
                         printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
                         continue;
                     }
                     min_rnd = (unsigned)atoi(argv[++i]);
-                } else if (strcmp("--max-rnd", argv[i]) == 0 || strcmp("-mx", argv[i]) == 0) {
+                } else if (!strcmp("--max-rnd", argv[i]) || !strcmp("-mx", argv[i])) {
                     if ((i + 1) > (argc - 1)) {
                         printf("WARNING! No argument passed after %s! Skipping!\n", argv[i]);
                         continue;
@@ -149,10 +171,41 @@ int main (int argc, const char *argv[]) {
     long         start_time  = get_time();
     unsigned int total_trips = 0;
     if (mode == M_MINE) {
-        if (strlen(mine_regex) <= 0) {
-            printf("ERROR! Blank regex passed!\n");
+        if (mine_test == NULL) {
+            printf("ERROR! Blank mining string passed!\n");
+            return EXIT_FAILURE;
+        } else if (strlen(mine_test) <= 0) {
+            printf("ERROR! Blank mining string passed!\n");
             return EXIT_FAILURE;
         }
+
+        void (*mine_mode)(void*) = (ascii ?
+                (mine_is_regex ? mine_mode_ascii_regexp : mine_mode_ascii) :
+                (mine_is_regex ? mine_mode_sjis_regex : mine_mode_sjis));
+        mine_arg t_arg = { min_rnd, max_rnd, mine_test, NULL };
+
+        mtx_t t_mtx;
+        mtx_init(&t_mtx, NULL);
+        mtx_lock(&t_mtx);
+        t_arg.mtx = &t_mtx;
+
+        thrd_t* t = malloc(total_threads * sizeof(thrd_t*));
+        for (int i = 0; i < total_threads; ++i)
+            thrd_create(&t[i], mine_mode, (void*)&t_arg);
+
+        if (timeout)
+            SLEEP(timeout);
+        else
+            while (!exit_loops);
+
+        mtx_unlock(&t_mtx);
+        for (int j = 0; j < total_threads; ++j) {
+            int tmp_ret = 0;
+            thrd_join(t[j], (void**)&tmp_ret);
+            total_trips += tmp_ret;
+        }
+
+        free(t);
     } else if (mode == M_TEST)
         test_mode();
     else if (mode == M_GEN) {
@@ -240,7 +293,6 @@ int main (int argc, const char *argv[]) {
             }
             total_trips = total_gen;
         }
-    } else if (mode == M_MINE) {
     } else if (mode == M_SINGLE)
         single_mode(min_rnd, max_rnd, ascii);
 
@@ -476,3 +528,15 @@ void* nstop_bench_mode_sjis (void* arg) {
     return (void*)total_gen;
 }
 
+void* mine_mode_ascii (void* arg) {
+}
+
+void* mine_mode_ascii_regexp (void* arg) {
+    puts("here!");
+}
+
+void* mine_mode_sjis (void* arg) {
+}
+
+void* mine_mode_sjis_regex (void* arg) {
+}
