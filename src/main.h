@@ -73,7 +73,6 @@ void* nstop_bench_mode_sjis (void*);
 typedef struct {
     unsigned int min, max;
     const char* search;
-    size_t search_len;
     bool caseless;
     mtx_t* mtx;
 } mine_arg;

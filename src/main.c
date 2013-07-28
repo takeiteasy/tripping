@@ -177,10 +177,7 @@ int main (int argc, const char *argv[]) {
         void (*mine_mode)(void*) = (ascii ?
                 (mine_is_regex ? mine_mode_ascii_regexp : mine_mode_ascii) :
                 (mine_is_regex ? mine_mode_sjis_regex : mine_mode_sjis));
-
-        mine_arg t_arg = { min_rnd, max_rnd,
-                           mine_test, strlen(mine_test),
-                           caseless, NULL };
+        mine_arg t_arg = { min_rnd, max_rnd, mine_test, caseless, NULL };
 
         mtx_t t_mtx;
         mtx_init(&t_mtx, NULL);
@@ -549,15 +546,33 @@ bool str_contains (const char* a, size_t a_len, const char* b, size_t b_len) {
     return false;
 }
 
+bool str_contains_caseless (const char* a, size_t a_len, const char* b, size_t b_len) {
+    char* tmp = malloc(a_len);
+    str_to_lower(tmp, a, a_len);
+    bool ret = str_contains(tmp, a_len, b, b_len);
+    free(tmp);
+    return ret;
+}
+
 void* mine_mode_ascii (void* arg) {
     mine_arg t_arg = *((mine_arg*)arg);
     int total_gen = 0;
+
+    size_t search_len = strlen(t_arg.search);
+    if (t_arg.caseless) {
+        char* tmp = malloc(search_len);
+        str_to_lower(tmp, t_arg.search, search_len);
+        free(t_arg.search);
+        t_arg.search = tmp;
+        printf("%s\n", t_arg.search);
+    }
+    bool (*substr)(const char*, size_t, const char*, size_t) = (t_arg.caseless ? str_contains_caseless : str_contains);
 
     while (!thread_quit(t_arg.mtx)) {
         char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
         char* out = gen_trip_ascii(rnd, strlen(rnd));
 
-        if (str_contains(out, 11, t_arg.search, strlen(t_arg.search)))
+        if (substr(out, 11, t_arg.search, search_len))
             printf("%s => %s\n", rnd, out);
 
         free(rnd);
@@ -575,7 +590,10 @@ void* mine_mode_ascii_regexp (void* arg) {
 
     const char* err;
     int err_off, mvec[MVEC_LEN];
-    pcre* r = pcre_compile(t_arg.search, PCRE_DOTALL, &err, &err_off, NULL);
+    int options = PCRE_DOTALL;
+    if (t_arg.caseless)
+        options |= PCRE_CASELESS;
+    pcre* r = pcre_compile(t_arg.search, options, &err, &err_off, NULL);
 
     while (!thread_quit(t_arg.mtx)) {
         char* rnd = rndstr_ascii(RAND_RANGE(t_arg.min, t_arg.max));
@@ -599,11 +617,21 @@ void* mine_mode_sjis (void* arg) {
     iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
     int total_gen = 0;
 
+    size_t search_len = strlen(t_arg.search);
+    if (t_arg.caseless) {
+        char* tmp = malloc(search_len);
+        str_to_lower(tmp, t_arg.search, search_len);
+        free(t_arg.search);
+        t_arg.search = tmp;
+        printf("%s\n", t_arg.search);
+    }
+    bool (*substr)(const char*, size_t, const char*, size_t) = (t_arg.caseless ? str_contains_caseless : str_contains);
+
     while (!thread_quit(t_arg.mtx)) {
         char* rnd = rndstr_sjis(RAND_RANGE(t_arg.min, t_arg.max));
         char* out = gen_trip_sjis(cd, rnd, strlen(rnd));
 
-        if (str_contains(out, 11, t_arg.search, strlen(t_arg.search)))
+        if (substr(out, 11, t_arg.search, strlen(t_arg.search)))
             printf("%s => %s\n", rnd, out);
 
         free(rnd);
@@ -622,7 +650,10 @@ void* mine_mode_sjis_regex (void* arg) {
 
     const char* err;
     int err_off, mvec[MVEC_LEN];
-    pcre* r = pcre_compile(t_arg.search, PCRE_DOTALL, &err, &err_off, NULL);
+    int options = PCRE_DOTALL;
+    if (t_arg.caseless)
+        options |= PCRE_CASELESS;
+    pcre* r = pcre_compile(t_arg.search, options, &err, &err_off, NULL);
     iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
 
     while (!thread_quit(t_arg.mtx)) {
