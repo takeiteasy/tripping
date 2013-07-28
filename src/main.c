@@ -1,11 +1,5 @@
 #include "main.h"
 
-/* TODO
- *  Optimize make_trip
- *  Add comments for reference
- *  Finish print_help & update README
- */
-
 int main (int argc, const char *argv[]) {
     srand((unsigned int)time(NULL));
     signal(SIGTERM, signal_handler);
