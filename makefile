@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 CC      = clang
 CFLAGS  = -Weverything -02 -std=gnu99
 LINKER  = -pthread -lcrypto -liconv -lpcre
@@ -9,3 +10,11 @@ all: src/main.c
 debug: src/main.c
 	$(CC) $(CFLAGS) -DDEBUGGING $(INC) $(LINKER)
 
+=======
+CC     = clang
+CFLAGS = -Weverything -O3
+LINKER = -pthread -lcrypto
+
+xtrip:
+	$(CC) $(CFLAGS) main.c -o xtrip $(LINKER)
+>>>>>>> master
