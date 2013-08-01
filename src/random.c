@@ -746,7 +746,7 @@ size_t rndstr_sjis (unsigned short len, char* dst) {
             if (c_range == TOTAL_RANGES)
                 tmp = to_utf8(left_overs[RAND_RANGE(0, TOTAL_LEFTOVERS)]);
             else
-                tmp = to_utf8(left_overs[RAND_RANGE(0, TOTAL_LEFTOVERS)]);
+                tmp = to_utf8(RAND_RANGE(ranges[c_range].min, ranges[c_range].max)); 
         }
 
         strcat(dst, tmp);
