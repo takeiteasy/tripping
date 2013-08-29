@@ -25,6 +25,7 @@
 #if defined PLAT_WIN
 #   define SLEEP(x) Sleep((x) / 1000)
 #else
+#   include <sys/stat.h>
 #   include <unistd.h>
 #   define SLEEP(x) sleep((x))
 #endif
@@ -43,6 +44,7 @@ void print_help (const char*);
 void signal_handler (int);
 long get_time (void);
 void u_sleep (unsigned int);
+bool file_exists (char*);
 
 /* Mode functions */
 void single_mode (void);

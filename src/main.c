@@ -84,9 +84,44 @@ int main (int argc, const char *argv[]) {
                 free(out);
             } else {
                 for (int i = extra_args; i < argc; ++i) {
-                    char* out = gen_trip_sjis(cd, argv[i], strlen(argv[i]));
-                    printf("%s => %s\n", argv[i], out);
-                    free(out);
+                    if (!strcmp("--files", argv[i])) {
+                        if (i == (argc - 1))
+                            printf("8eZckxApdQ");
+                        else {
+                            i += 1;
+                            char* files = strtok(argv[i], ":");
+                            while (files) {
+                                if (file_exists(files)) {
+                                    FILE* fh = fopen(files, "r");
+                                    if (!fh) {
+                                         printf("ERROR! Failed to open file \"%s\"", files);
+                                         return EXIT_FAILURE;
+                                    }
+
+                                    char* line = NULL;
+                                    size_t len = 0;
+                                    ssize_t read;
+                                    while ((read = getline(&line, &len, fh)) != -1) {
+                                        char* new_line = malloc(read - 1);
+                                        strncpy(new_line, line, read - 1);
+
+                                        char* out = gen_trip_sjis(cd, new_line, strlen(new_line));
+                                        printf("%s => %s\n", new_line, out);
+
+                                        free(out);
+                                        free(new_line);
+                                    }
+                                    free(line);
+                                    fclose(fh);
+                                }
+                                files = strtok(NULL, ":");
+                            }
+                        }
+                    } else {
+                        char* out = gen_trip_sjis(cd, argv[i], strlen(argv[i]));
+                        printf("%s => %s\n", argv[i], out);
+                        free(out);
+                    }
                 }
             }
             iconv_close(cd);
@@ -370,11 +405,21 @@ long get_time() {
 #endif
 }
 
+bool file_exists (char* path) {
+#if defined PLAT_WIN
+    DWORD dw = GetFileAttributes(path);
+    return (dw != INVALID_FILE_ATTRIBUTES && !(dw & FILE_ATTRIBUTE_DIRECTORY));
+#else
+    struct stat st;
+    return (stat (path, &st) == 0);
+#endif
+}
+
 void single_mode () {
     iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
     size_t len = RAND_RANGE(2, 14);
     char*  rnd = malloc(len * 5);
-           len = rndstr_sjis(len, rnd);
+    len = rndstr_sjis(len, rnd);
     char*  out = gen_trip_sjis(cd, rnd, len);
     printf("%s => %s\n", rnd, out);
     free(rnd);

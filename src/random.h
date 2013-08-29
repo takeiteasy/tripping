@@ -11,7 +11,7 @@ char*  rndstr_ascii (unsigned short);
 size_t rndstr_sjis (unsigned short, char*);
 
 typedef struct {
-	unsigned short min, max;
+    unsigned short min, max;
 } range_t;
 
 #endif
