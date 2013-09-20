@@ -76,5 +76,5 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # Dependencies
 
 Depends on PCRE ([BSD](https://en.wikipedia.org/wiki/BSD_licenses)) and PThreads (OSX/Linux)<br/>
-C11 threads wrapper ([boost](https://en.wikipedia.org/wiki/Boost_Software_License)) made by [yahhoy](https://gist.github.com/yohhoy/2223710), modified by [me](https://gist.github.com/badassmofo/5897507)
+C11 threads wrapper ([boost](https://en.wikipedia.org/wiki/Boost_Software_License)) made by [yahhoy](https://gist.github.com/yohhoy/2223710), modified by [me](https://gist.github.com/takeiteasy/5897507
 
