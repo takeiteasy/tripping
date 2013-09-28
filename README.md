@@ -2,7 +2,7 @@
 
 Mine tripcodes using regex or just substring matching, generate X number of<br/>
 tripcodes or just until you quit or test tripcodes.<br/>
-Tested on OSX and Linux. Should work on Windows too, however that is untested.<br/>
+Tested on OSX and a bit on Linux, however totally untested on Windows.
 
 ## Usage
 
