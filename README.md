@@ -1,7 +1,7 @@
 # tripping
 
-Mine tripcodes using regex or just substring matching, generate X number of<br/>
-tripcodes or just until you quit or test tripcodes.<br/>
+Mine tripcodes using regex or just substring matching.
+Generate X number of tripcodes or just until you quit or test tripcodes.<br/>
 Tested on OSX and a bit on Linux, however totally untested on Windows.
 
 ## Usage
