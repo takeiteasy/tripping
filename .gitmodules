@@ -1,0 +1,3 @@
+[submodule "lib/threads"]
+	path = lib/threads
+	url = https://gist.github.com/takeiteasy/5897507
