@@ -1,7 +1,6 @@
 # tripping
 
-Tripcode brute-forcer with support for regex searches and multiple different modes.
-
+Tripcode brute-forcer with support for regex searches and multiple different modes. Depends on PCRE, pthread and iconv. DES implementation taken from openssl.
 
 ## Usage
 
