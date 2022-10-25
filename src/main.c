@@ -1,4 +1,452 @@
-#include "main.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <signal.h>
+#include <time.h>
+#include <pcre.h>
+#include <pthread.h>
+#if defined(__APPLE__)
+#include <mach/mach_time.h>
+#endif
+#include <sys/stat.h>
+#include <unistd.h>
+#include "tripcode.h"
+#include "random.h"
+
+typedef enum {
+    M_TEST,
+    M_GEN,
+    M_MINE,
+    M_SINGLE,
+    M_BENCH,
+    M_NOMODE
+} modes_e;
+
+typedef struct {
+    unsigned int min, max;
+    pthread_mutex_t* mtx;
+} nstop_gen_arg;
+
+typedef struct {
+    unsigned int min, max, target;
+    pthread_mutex_t* mtx;
+} bench_arg;
+
+typedef struct {
+    unsigned int min, max;
+    const char* search;
+    bool caseless;
+    pthread_mutex_t* mtx;
+} mine_arg;
+
+static volatile sig_atomic_t exit_loops = 0;
+
+static void print_help (const char* prog_name) {
+    printf("http://www.github.com/badassmofo/tripping\n");
+    printf("usage: %s [mode] [option] [options]\n\n", prog_name);
+    printf("modes\n");
+    printf("  single -> If no arguments are entered, it'll spit out a random tripcode\n");
+    printf("  test   -> Interactive test mode, or test specified trips\n");
+    printf("            %s test these tripcodes or %s test\n", prog_name, prog_name);
+    printf("  gen    -> Generate a specified amount of tripcodes, or until quit\n");
+    printf("            %s gen 100 or %s gen\n", prog_name, prog_name);
+    printf("  mine   -> Try and bruteforce match a tripcode using regex or just substring search\n");
+    printf("            %s mine /^test/ or %s mine test\n", prog_name, prog_name);
+    printf("  bench  -> Benchmark mode, same as gen without printing out the trips\n");
+    printf("  help   -> Prints this message!\n");
+    printf("\noptions\n");
+    printf("  --benchmark/-b -> Benchmark operation (different to bench mode)\n");
+    printf("  --ascii/-a     -> ASCII only mode, don't use SJIS at all\n");
+    printf("  --caseless/-i  -> Caseless matching (mine mode only)\n");
+    printf("  --threads/-th  -> Specify amount of threads to use\n");
+    printf("  --timeout/-to  -> Specify timeout for non-stop gen/bench and mine (secs)\n");
+    printf("  --min-rnd/-mi  -> Specify the minimum random string length\n");
+    printf("  --max-rnd/-mx  -> Specify the maximum random string length\n");
+    printf("\nexamples:\n");
+    printf("  %s mine /^hello/ -a -b -i\n", prog_name);
+    printf("    Search for tripcodes that begin with \"hello\", only using ASCII\n");
+    printf("    but ignore the case and benchmark it.\n\n");
+    printf("  %s mine /^(\\d+)$/ -th 8\n", prog_name);
+    printf("    Search for tripcodes that is just a number using 8 threads.\n\n");
+    printf("  %s gen -to 10 -mi 5 -mx 10\n", prog_name);
+    printf("    Generate random tripcodes for 10 seconds using the range 5 to 10\n\n");
+    printf("  %s test all of these tripcodes for me\n", prog_name);
+    printf("    Turn \"all\", \"of\", \"these\", \"tripcodes\", \"for\" and \"me\" into tripcodes\n");
+}
+
+static long get_time() {
+#if defined(__APPLE__)
+    static mach_timebase_info_data_t freq = {0, 0};
+    if (freq.denom == 0)
+        mach_timebase_info(&freq);
+    return (mach_absolute_time() * freq.numer / freq.denom) / 1000;
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ((long)(ts.tv_sec) * 1000000 + ts.tv_nsec / 1000);
+#endif
+}
+
+static bool file_exists (char* path) {
+    struct stat st;
+    return (stat(path, &st) == 0);
+}
+
+static void single_mode () {
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+    size_t len = RAND_RANGE(2, 14);
+    char*  rnd = malloc(len * 5);
+    len = rndstr_sjis(len, rnd);
+    char*  out = gen_trip_sjis(cd, rnd, len);
+    printf("%s => %s\n", rnd, out);
+    free(rnd);
+    free(out);
+    iconv_close(cd);
+}
+
+static void test_mode() {
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+
+#define BUF_MAX 128
+#define MAX_LEN 24
+
+    char buf[BUF_MAX];
+    size_t len = 0;
+
+    while (!exit_loops) {
+        printf("\e[01;32m>\e[0m ");
+
+        if (fgets(buf, BUF_MAX, stdin) == NULL)
+            break;
+        len = strlen(buf);
+
+        if (len > MAX_LEN) {
+            buf[MAX_LEN   - 1] = '\0';
+            len = MAX_LEN - 1;
+        } else
+            buf[len - 1] = '\0';
+
+        if (strcmp(buf, "exit") == 0)
+            break;
+
+        char* out = gen_trip_sjis(cd, buf, len);
+        printf("\e[01;33m>\e[0m %s\n", out);
+        free(out);
+    }
+
+    iconv_close(cd);
+}
+
+static bool thread_quit (pthread_mutex_t* mtx) {
+    int res = pthread_mutex_trylock(mtx);
+    if (!res) {
+        pthread_mutex_unlock(mtx);
+        return true;
+    }
+    return false;
+}
+
+static void gen_mode_ascii (unsigned int total, unsigned int rnd_min, unsigned int rnd_max) {
+    for (int i = 0; i < total; ++i) {
+        size_t len = RAND_RANGE(rnd_min, rnd_max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
+
+        printf("%s => %s\n", rnd, out);
+        free(rnd);
+        free(out);
+    }
+}
+
+static void gen_mode_sjis (unsigned int total, unsigned int rnd_min, unsigned int rnd_max) {
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+    for (int i = 0; i < total; ++i) {
+        size_t len = RAND_RANGE(rnd_min, rnd_max);
+        char*  rnd = malloc(len * 5);
+        len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
+
+        printf("%s => %s\n", rnd, out);
+        free(rnd);
+        free(out);
+    }
+    iconv_close(cd);
+}
+
+static void* nstop_gen_mode_ascii (void* arg) {
+    nstop_gen_arg t_arg = *((nstop_gen_arg*)arg);
+    int total_gen = 0;
+
+    while (!thread_quit(t_arg.mtx)) {
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
+
+        printf("%s => %s\n", rnd, out);
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    return (void*)total_gen;
+}
+
+static void* nstop_gen_mode_sjis (void* arg) {
+    nstop_gen_arg t_arg = *((nstop_gen_arg*)arg);
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+    int total_gen = 0;
+
+    while (!thread_quit(t_arg.mtx)) {
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = malloc(len * 5);
+        len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
+
+        printf("%s => %s\n", rnd, out);
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    iconv_close(cd);
+    return (void*)total_gen;
+}
+
+static void bench_mode_ascii (void* arg) {
+    bench_arg t_arg = *((bench_arg*)arg);
+    for (int i = 0; i < t_arg.target; ++i) {
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
+        free(rnd);
+        free(out);
+    }
+}
+
+static void bench_mode_sjis (void* arg) {
+    bench_arg t_arg = *((bench_arg*)arg);
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+    for (int i = 0; i < t_arg.target; ++i) {
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = malloc(len * 5);
+        len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
+        free(rnd);
+        free(out);
+    }
+    iconv_close(cd);
+}
+
+static void* nstop_bench_mode_ascii (void* arg) {
+    bench_arg t_arg = *((bench_arg*)arg);
+    int total_gen = 0;
+
+    while (!thread_quit(t_arg.mtx)) {
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    return (void*)total_gen;
+}
+
+static void* nstop_bench_mode_sjis (void* arg) {
+    bench_arg t_arg = *((bench_arg*)arg);
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+    int total_gen = 0;
+
+    while (!thread_quit(t_arg.mtx)) {
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = malloc(len * 5);
+        len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    iconv_close(cd);
+    return (void*)total_gen;
+}
+
+static void str_to_lower(char* dst, const char* src, size_t src_len) {
+    for (size_t i = 0; i < src_len; ++i)
+        dst[i] = (src[i] >= 65 && src[i] <= 90 ? src[i] + 32 : src[i]);
+    dst[src_len] = '\0';
+}
+
+static bool str_contains (const char* a, size_t a_len, const char* b, size_t b_len) {
+    if (b_len > a_len || !a || !b)
+        return false;
+
+    for (size_t i = 0; i < a_len; ++i) {
+        if (a[i] == b[0]) {
+            bool match = true;
+            for (size_t j = 1; j < b_len; ++j)
+                if (a[i + j] != b[j])
+                    match = false;
+            if (match)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool str_contains_caseless (const char* a, size_t a_len, const char* b, size_t b_len) {
+    char* tmp = malloc(a_len);
+    str_to_lower(tmp, a, a_len);
+    bool ret = str_contains(tmp, a_len, b, b_len);
+    free(tmp);
+    return ret;
+}
+
+static void* mine_mode_ascii (void* arg) {
+    mine_arg t_arg = *((mine_arg*)arg);
+    int total_gen = 0;
+
+    size_t search_len = strlen(t_arg.search);
+    if (t_arg.caseless) {
+        char* tmp = malloc(search_len);
+        str_to_lower(tmp, t_arg.search, search_len);
+        free(t_arg.search);
+        t_arg.search = tmp;
+        printf("%s\n", t_arg.search);
+    }
+    bool (*substr)(const char*, size_t, const char*, size_t) = (t_arg.caseless ? str_contains_caseless : str_contains);
+
+    while (!thread_quit(t_arg.mtx)) {
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
+
+        if (substr(out, 11, t_arg.search, search_len))
+            printf("%s => %s\n", rnd, out);
+
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    return (void*)total_gen;
+}
+
+#define MVEC_LEN 14
+
+static void* mine_mode_ascii_regexp (void* arg) {
+    mine_arg t_arg = *((mine_arg*)arg);
+    int total_gen = 0;
+
+    const char* err;
+    int err_off, mvec[MVEC_LEN];
+    int options = PCRE_DOTALL;
+    if (t_arg.caseless)
+        options |= PCRE_CASELESS;
+    pcre* r = pcre_compile(t_arg.search, options, &err, &err_off, NULL);
+
+    while (!thread_quit(t_arg.mtx)) {
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = rndstr_ascii(len);
+        char*  out = gen_trip_ascii(rnd, len);
+
+        int rc = pcre_exec(r, NULL, out, 11, 0, 0, mvec, MVEC_LEN);
+        if (rc >= 0)
+            printf("%s => %s\n", rnd, out);
+
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    return (void*)total_gen;
+}
+
+static void* mine_mode_sjis (void* arg) {
+    mine_arg t_arg = *((mine_arg*)arg);
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+    int total_gen = 0;
+
+    size_t search_len = strlen(t_arg.search);
+    if (t_arg.caseless) {
+        char* tmp = malloc(search_len);
+        str_to_lower(tmp, t_arg.search, search_len);
+        free(t_arg.search);
+        t_arg.search = tmp;
+    }
+    bool (*substr)(const char*, size_t, const char*, size_t) = (t_arg.caseless ? str_contains_caseless : str_contains);
+
+    while (!thread_quit(t_arg.mtx)) {
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = malloc(len * 5);
+        len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
+
+        if (substr(out, 11, t_arg.search, search_len))
+            printf("%s => %s\n", rnd, out);
+
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    iconv_close(cd);
+    return (void*)total_gen;
+}
+
+static void* mine_mode_sjis_regex (void* arg) {
+    mine_arg t_arg = *((mine_arg*)arg);
+    int total_gen = 0;
+
+    const char* err;
+    int err_off, mvec[MVEC_LEN];
+    int options = PCRE_DOTALL;
+    if (t_arg.caseless)
+        options |= PCRE_CASELESS;
+    pcre* r = pcre_compile(t_arg.search, options, &err, &err_off, NULL);
+    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
+
+    while (!thread_quit(t_arg.mtx)) {
+        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
+        char*  rnd = malloc(len * 5);
+        len = rndstr_sjis(len, rnd);
+        char*  out = gen_trip_sjis(cd, rnd, len);
+
+        int rc = pcre_exec(r, NULL, out, 11, 0, 0, mvec, MVEC_LEN);
+        if (rc >= 0)
+            printf("%s => %s\n", rnd, out);
+
+        free(rnd);
+        free(out);
+
+        total_gen += 1;
+    }
+
+    iconv_close(cd);
+    return (void*)total_gen;
+}
+
+static void signal_handler (int signal) {
+    switch (signal) {
+        case SIGTERM:
+            printf(" EXITING! SIGTERM (terminated)\n");
+            break;
+        case SIGINT:
+            printf(" EXITING! SIGINT (interrupted)\n");
+            break;
+        default:
+            printf(" EXITING! UNKNOWN (%d)\n", signal);
+    }
+    exit_loops = 1;
+}
 
 int main (int argc, const char *argv[]) {
     srand((unsigned int)time(NULL));
@@ -214,24 +662,24 @@ int main (int argc, const char *argv[]) {
                 (mine_is_regex ? mine_mode_sjis_regex : mine_mode_sjis));
         mine_arg t_arg = { min_rnd, max_rnd, mine_test, caseless, NULL };
 
-        mtx_t t_mtx;
-        mtx_init(&t_mtx, NULL);
-        mtx_lock(&t_mtx);
+        pthread_mutex_t t_mtx;
+        pthread_mutex_init(&t_mtx, NULL);
+        pthread_mutex_lock(&t_mtx);
         t_arg.mtx = &t_mtx;
 
-        thrd_t* t = malloc(total_threads * sizeof(thrd_t*));
+        pthread_t* t = malloc(total_threads * sizeof(pthread_t*));
         for (int i = 0; i < total_threads; ++i)
-            thrd_create(&t[i], mine_mode, (void*)&t_arg);
+            pthread_create(&t[i], NULL, mine_mode, (void*)&t_arg);
 
         if (timeout)
-            SLEEP(timeout);
+            sleep(timeout);
         else
             while (!exit_loops);
 
-        mtx_unlock(&t_mtx);
+        pthread_mutex_unlock(&t_mtx);
         for (int j = 0; j < total_threads; ++j) {
             int tmp_ret = 0;
-            thrd_join(t[j], (void**)&tmp_ret);
+            pthread_join(t[j], (void**)&tmp_ret);
             total_trips += tmp_ret;
         }
 
@@ -245,21 +693,21 @@ int main (int argc, const char *argv[]) {
             void (*nstop_gen_mode)(void*) = (ascii ? nstop_gen_mode_ascii : nstop_gen_mode_sjis);
             nstop_gen_arg t_arg = { min_rnd, max_rnd, NULL };
 
-            mtx_t t_mtx;
-            mtx_init(&t_mtx, NULL);
-            mtx_lock(&t_mtx);
+            pthread_mutex_t t_mtx;
+            pthread_mutex_init(&t_mtx, NULL);
+            pthread_mutex_lock(&t_mtx);
             t_arg.mtx = &t_mtx;
 
-            thrd_t t;
-            thrd_create(&t, nstop_gen_mode, (void*)&t_arg);
+            pthread_t t;
+            pthread_create(&t, NULL, nstop_gen_mode, (void*)&t_arg);
 
             if (timeout)
-                SLEEP(timeout);
+                sleep(timeout);
             else
                 while (!exit_loops);
 
-            mtx_unlock(&t_mtx);
-            thrd_join(t, (void**)&total_trips);
+            pthread_mutex_unlock(&t_mtx);
+            pthread_join(t, (void**)&total_trips);
         } else {
             void (*gen_mode)(int, int, int) = (ascii ? gen_mode_ascii : gen_mode_sjis);
             gen_mode(total_gen, min_rnd, max_rnd);
@@ -272,24 +720,24 @@ int main (int argc, const char *argv[]) {
             void (*nstop_bench_mode)(void*) = (ascii ? nstop_bench_mode_ascii : nstop_bench_mode_sjis);
             bench_arg t_arg = { min_rnd, max_rnd, 0, NULL };
 
-            mtx_t t_mtx;
-            mtx_init(&t_mtx, NULL);
-            mtx_lock(&t_mtx);
+            pthread_mutex_t t_mtx;
+            pthread_mutex_init(&t_mtx, NULL);
+            pthread_mutex_lock(&t_mtx);
             t_arg.mtx = &t_mtx;
 
-            thrd_t* t = malloc(total_threads * sizeof(thrd_t*));
+            pthread_t* t = malloc(total_threads * sizeof(pthread_t*));
             for (int i = 0; i < total_threads; ++i)
-                thrd_create(&t[i], nstop_bench_mode, (void*)&t_arg);
+                pthread_create(&t[i], NULL, nstop_bench_mode, (void*)&t_arg);
 
             if (timeout)
-                SLEEP(timeout);
+                sleep(timeout);
             else
                 while (!exit_loops);
 
-            mtx_unlock(&t_mtx);
+            pthread_mutex_unlock(&t_mtx);
             for (int j = 0; j < total_threads; ++j) {
                 int tmp_ret = 0;
-                thrd_join(t[j], (void**)&tmp_ret);
+                pthread_join(t[j], (void**)&tmp_ret);
                 total_trips += tmp_ret;
             }
 
@@ -306,7 +754,7 @@ int main (int argc, const char *argv[]) {
                 if ((trips_per_thread * total_threads) != total_gen)
                     first_thread_total += (total_gen - (trips_per_thread * total_threads));
 
-                thrd_t* t = malloc(total_threads * sizeof(thrd_t*));
+                pthread_t* t = malloc(total_threads * sizeof(pthread_t*));
                 bench_arg t_args[total_threads];
                 for (int i = 0; i < total_threads; ++i) {
                     t_args[i].target = (!i ? first_thread_total : trips_per_thread);
@@ -315,9 +763,9 @@ int main (int argc, const char *argv[]) {
                 }
 
                 for (int j = 0; j < total_threads; ++j)
-                    thrd_create(&t[j], bench_mode, (void*)&t_args[j]);
+                    pthread_create(&t[j], NULL, bench_mode, (void*)&t_args[j]);
                 for (int k = 0; k < total_threads; ++k)
-                    thrd_join(t[k], NULL);
+                    pthread_join(t[k], NULL);
 
                 free(t);
             }
@@ -333,435 +781,3 @@ int main (int argc, const char *argv[]) {
     }
     return EXIT_SUCCESS;
 }
-
-void print_help (const char* prog_name) {
-    printf("http://www.github.com/badassmofo/tripping\n");
-    printf("usage: %s [mode] [option] [options]\n\n", prog_name);
-    printf("modes\n");
-    printf("  single -> If no arguments are entered, it'll spit out a random tripcode\n");
-    printf("  test   -> Interactive test mode, or test specified trips\n");
-    printf("            %s test these tripcodes or %s test\n", prog_name, prog_name);
-    printf("  gen    -> Generate a specified amount of tripcodes, or until quit\n");
-    printf("            %s gen 100 or %s gen\n", prog_name, prog_name);
-    printf("  mine   -> Try and bruteforce match a tripcode using regex or just substring search\n");
-    printf("            %s mine /^test/ or %s mine test\n", prog_name, prog_name);
-    printf("  bench  -> Benchmark mode, same as gen without printing out the trips\n");
-    printf("  help   -> Prints this message!\n");
-    printf("\noptions\n");
-    printf("  --benchmark/-b -> Benchmark operation (different to bench mode)\n");
-    printf("  --ascii/-a     -> ASCII only mode, don't use SJIS at all\n");
-    printf("  --caseless/-i  -> Caseless matching (mine mode only)\n");
-    printf("  --threads/-th  -> Specify amount of threads to use\n");
-    printf("  --timeout/-to  -> Specify timeout for non-stop gen/bench and mine (secs)\n");
-    printf("  --min-rnd/-mi  -> Specify the minimum random string length\n");
-    printf("  --max-rnd/-mx  -> Specify the maximum random string length\n");
-    printf("\nexamples:\n");
-    printf("  %s mine /^hello/ -a -b -i\n", prog_name);
-    printf("    Search for tripcodes that begin with \"hello\", only using ASCII\n");
-    printf("    but ignore the case and benchmark it.\n\n");
-    printf("  %s mine /^(\d+)$/ -th 8\n", prog_name);
-    printf("    Search for tripcodes that is just a number using 8 threads.\n\n");
-    printf("  %s gen -to 10 -mi 5 -mx 10\n", prog_name);
-    printf("    Generate random tripcodes for 10 seconds using the range 5 to 10\n\n");
-    printf("  %s test all of these tripcodes for me\n", prog_name);
-    printf("    Turn \"all\", \"of\", \"these\", \"tripcodes\", \"for\" and \"me\" into tripcodes\n");
-}
-
-void signal_handler (int signal) {
-    switch (signal) {
-        case SIGTERM:
-            printf(" EXITING! SIGTERM (terminated)\n");
-            break;
-        case SIGINT:
-            printf(" EXITING! SIGINT (interrupted)\n");
-            break;
-        default:
-            printf(" EXITING! UNKNOWN (%d)\n", signal);
-    }
-    exit_loops = 1;
-}
-
-long get_time() {
-#if defined PLAT_OSX
-    static mach_timebase_info_data_t freq = {0, 0};
-    if (freq.denom == 0)
-        mach_timebase_info(&freq);
-    return (mach_absolute_time() * freq.numer / freq.denom) / 1000;
-#elif defined PLAT_WIN
-    HANDLE cur_thread   = GetCurrentThread();
-    DWORD_PTR prev_mask = SetThreadAffinityMask(cur_thread, 1);
-
-    static LARGE_INTEGER freq;
-    QueryPerformanceFrequency(&freq);
-    LARGE_INTEGER time;
-    QueryPerformanceCounter(&time);
-
-    SetThreadAffinityMask(cur_thread, prev_mask);
-    return (1000000 * time.QuadPart / freq.QuadPart);
-#else
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ((long)(ts.tv_sec) * 1000000 + ts.tv_nsec / 1000);
-#endif
-}
-
-bool file_exists (char* path) {
-#if defined PLAT_WIN
-    DWORD dw = GetFileAttributes(path);
-    return (dw != INVALID_FILE_ATTRIBUTES && !(dw & FILE_ATTRIBUTE_DIRECTORY));
-#else
-    struct stat st;
-    return (stat (path, &st) == 0);
-#endif
-}
-
-void single_mode () {
-    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-    size_t len = RAND_RANGE(2, 14);
-    char*  rnd = malloc(len * 5);
-    len = rndstr_sjis(len, rnd);
-    char*  out = gen_trip_sjis(cd, rnd, len);
-    printf("%s => %s\n", rnd, out);
-    free(rnd);
-    free(out);
-    iconv_close(cd);
-}
-
-void test_mode() {
-    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-
-#define BUF_MAX 128
-#define MAX_LEN 24
-
-    char buf[BUF_MAX];
-    size_t len = 0;
-
-    while (!exit_loops) {
-#if defined PLAT_WIN
-        printf("> ");
-#else
-        printf("\e[01;32m>\e[0m ");
-#endif
-
-        if (fgets(buf, BUF_MAX, stdin) == NULL)
-            break;
-        len = strlen(buf);
-
-        if (len > MAX_LEN) {
-            buf[MAX_LEN   - 1] = '\0';
-            len = MAX_LEN - 1;
-        } else
-            buf[len - 1] = '\0';
-
-        if (strcmp(buf, "exit") == 0)
-            break;
-
-        char* out = gen_trip_sjis(cd, buf, len);
-#if defined PLAT_WIN
-        printf("< %s\n", out);
-#else
-        printf("\e[01;33m>\e[0m %s\n", out);
-#endif
-        free(out);
-    }
-
-    iconv_close(cd);
-}
-
-bool thread_quit (mtx_t* mtx) {
-    switch (mtx_trylock(mtx)) {
-        case thrd_success:
-            mtx_unlock(mtx);
-            return true;
-        case thrd_busy:
-            return false;
-    }
-    return true;
-}
-
-void gen_mode_ascii (unsigned int total, unsigned int rnd_min, unsigned int rnd_max) {
-    for (int i = 0; i < total; ++i) {
-        size_t len = RAND_RANGE(rnd_min, rnd_max);
-        char*  rnd = rndstr_ascii(len);
-        char*  out = gen_trip_ascii(rnd, len);
-
-        printf("%s => %s\n", rnd, out);
-        free(rnd);
-        free(out);
-    }
-}
-
-void gen_mode_sjis (unsigned int total, unsigned int rnd_min, unsigned int rnd_max) {
-    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-    for (int i = 0; i < total; ++i) {
-        size_t len = RAND_RANGE(rnd_min, rnd_max);
-        char*  rnd = malloc(len * 5);
-        len = rndstr_sjis(len, rnd);
-        char*  out = gen_trip_sjis(cd, rnd, len);
-
-        printf("%s => %s\n", rnd, out);
-        free(rnd);
-        free(out);
-    }
-    iconv_close(cd);
-}
-
-void* nstop_gen_mode_ascii (void* arg) {
-    nstop_gen_arg t_arg = *((nstop_gen_arg*)arg);
-    int total_gen = 0;
-
-    while (!thread_quit(t_arg.mtx)) {
-        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
-        char*  rnd = rndstr_ascii(len);
-        char*  out = gen_trip_ascii(rnd, len);
-
-        printf("%s => %s\n", rnd, out);
-        free(rnd);
-        free(out);
-
-        total_gen += 1;
-    }
-
-    return (void*)total_gen;
-}
-
-void* nstop_gen_mode_sjis (void* arg) {
-    nstop_gen_arg t_arg = *((nstop_gen_arg*)arg);
-    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-    int total_gen = 0;
-
-    while (!thread_quit(t_arg.mtx)) {
-        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
-        char*  rnd = malloc(len * 5);
-        len = rndstr_sjis(len, rnd);
-        char*  out = gen_trip_sjis(cd, rnd, len);
-
-        printf("%s => %s\n", rnd, out);
-        free(rnd);
-        free(out);
-
-        total_gen += 1;
-    }
-
-    iconv_close(cd);
-    return (void*)total_gen;
-}
-
-void bench_mode_ascii (void* arg) {
-    bench_arg t_arg = *((bench_arg*)arg);
-    for (int i = 0; i < t_arg.target; ++i) {
-        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
-        char*  rnd = rndstr_ascii(len);
-        char*  out = gen_trip_ascii(rnd, len);
-        free(rnd);
-        free(out);
-    }
-}
-
-void bench_mode_sjis (void* arg) {
-    bench_arg t_arg = *((bench_arg*)arg);
-    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-    for (int i = 0; i < t_arg.target; ++i) {
-        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
-        char*  rnd = malloc(len * 5);
-        len = rndstr_sjis(len, rnd);
-        char*  out = gen_trip_sjis(cd, rnd, len);
-        free(rnd);
-        free(out);
-    }
-    iconv_close(cd);
-}
-
-void* nstop_bench_mode_ascii (void* arg) {
-    bench_arg t_arg = *((bench_arg*)arg);
-    int total_gen = 0;
-
-    while (!thread_quit(t_arg.mtx)) {
-        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
-        char*  rnd = rndstr_ascii(len);
-        char*  out = gen_trip_ascii(rnd, len);
-        free(rnd);
-        free(out);
-
-        total_gen += 1;
-    }
-
-    return (void*)total_gen;
-}
-
-void* nstop_bench_mode_sjis (void* arg) {
-    bench_arg t_arg = *((bench_arg*)arg);
-    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-    int total_gen = 0;
-
-    while (!thread_quit(t_arg.mtx)) {
-        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
-        char*  rnd = malloc(len * 5);
-        len = rndstr_sjis(len, rnd);
-        char*  out = gen_trip_sjis(cd, rnd, len);
-        free(rnd);
-        free(out);
-
-        total_gen += 1;
-    }
-
-    iconv_close(cd);
-    return (void*)total_gen;
-}
-
-void str_to_lower(char* dst, const char* src, size_t src_len) {
-    for (size_t i = 0; i < src_len; ++i)
-        dst[i] = (src[i] >= 65 && src[i] <= 90 ? src[i] + 32 : src[i]);
-    dst[src_len] = '\0';
-}
-
-bool str_contains (const char* a, size_t a_len, const char* b, size_t b_len) {
-    if (b_len > a_len || !a || !b)
-        return false;
-
-    for (size_t i = 0; i < a_len; ++i) {
-        if (a[i] == b[0]) {
-            bool match = true;
-            for (size_t j = 1; j < b_len; ++j)
-                if (a[i + j] != b[j])
-                    match = false;
-            if (match)
-                return true;
-        }
-    }
-    return false;
-}
-
-bool str_contains_caseless (const char* a, size_t a_len, const char* b, size_t b_len) {
-    char* tmp = malloc(a_len);
-    str_to_lower(tmp, a, a_len);
-    bool ret = str_contains(tmp, a_len, b, b_len);
-    free(tmp);
-    return ret;
-}
-
-void* mine_mode_ascii (void* arg) {
-    mine_arg t_arg = *((mine_arg*)arg);
-    int total_gen = 0;
-
-    size_t search_len = strlen(t_arg.search);
-    if (t_arg.caseless) {
-        char* tmp = malloc(search_len);
-        str_to_lower(tmp, t_arg.search, search_len);
-        free(t_arg.search);
-        t_arg.search = tmp;
-        printf("%s\n", t_arg.search);
-    }
-    bool (*substr)(const char*, size_t, const char*, size_t) = (t_arg.caseless ? str_contains_caseless : str_contains);
-
-    while (!thread_quit(t_arg.mtx)) {
-        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
-        char*  rnd = rndstr_ascii(len);
-        char*  out = gen_trip_ascii(rnd, len);
-
-        if (substr(out, 11, t_arg.search, search_len))
-            printf("%s => %s\n", rnd, out);
-
-        free(rnd);
-        free(out);
-
-        total_gen += 1;
-    }
-
-    return (void*)total_gen;
-}
-
-void* mine_mode_ascii_regexp (void* arg) {
-    mine_arg t_arg = *((mine_arg*)arg);
-    int total_gen = 0;
-
-    const char* err;
-    int err_off, mvec[MVEC_LEN];
-    int options = PCRE_DOTALL;
-    if (t_arg.caseless)
-        options |= PCRE_CASELESS;
-    pcre* r = pcre_compile(t_arg.search, options, &err, &err_off, NULL);
-
-    while (!thread_quit(t_arg.mtx)) {
-        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
-        char*  rnd = rndstr_ascii(len);
-        char*  out = gen_trip_ascii(rnd, len);
-
-        int rc = pcre_exec(r, NULL, out, 11, 0, 0, mvec, MVEC_LEN);
-        if (rc >= 0)
-            printf("%s => %s\n", rnd, out);
-
-        free(rnd);
-        free(out);
-
-        total_gen += 1;
-    }
-
-    return (void*)total_gen;
-}
-
-void* mine_mode_sjis (void* arg) {
-    mine_arg t_arg = *((mine_arg*)arg);
-    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-    int total_gen = 0;
-
-    size_t search_len = strlen(t_arg.search);
-    if (t_arg.caseless) {
-        char* tmp = malloc(search_len);
-        str_to_lower(tmp, t_arg.search, search_len);
-        free(t_arg.search);
-        t_arg.search = tmp;
-    }
-    bool (*substr)(const char*, size_t, const char*, size_t) = (t_arg.caseless ? str_contains_caseless : str_contains);
-
-    while (!thread_quit(t_arg.mtx)) {
-        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
-        char*  rnd = malloc(len * 5);
-        len = rndstr_sjis(len, rnd);
-        char*  out = gen_trip_sjis(cd, rnd, len);
-
-        if (substr(out, 11, t_arg.search, search_len))
-            printf("%s => %s\n", rnd, out);
-
-        free(rnd);
-        free(out);
-
-        total_gen += 1;
-    }
-
-    iconv_close(cd);
-    return (void*)total_gen;
-}
-
-void* mine_mode_sjis_regex (void* arg) {
-    mine_arg t_arg = *((mine_arg*)arg);
-    int total_gen = 0;
-
-    const char* err;
-    int err_off, mvec[MVEC_LEN];
-    int options = PCRE_DOTALL;
-    if (t_arg.caseless)
-        options |= PCRE_CASELESS;
-    pcre* r = pcre_compile(t_arg.search, options, &err, &err_off, NULL);
-    iconv_t cd = iconv_open("SJIS//IGNORE", "UTF-8");
-
-    while (!thread_quit(t_arg.mtx)) {
-        size_t len = RAND_RANGE(t_arg.min, t_arg.max);
-        char*  rnd = malloc(len * 5);
-        len = rndstr_sjis(len, rnd);
-        char*  out = gen_trip_sjis(cd, rnd, len);
-
-        int rc = pcre_exec(r, NULL, out, 11, 0, 0, mvec, MVEC_LEN);
-        if (rc >= 0)
-            printf("%s => %s\n", rnd, out);
-
-        free(rnd);
-        free(out);
-
-        total_gen += 1;
-    }
-
-    iconv_close(cd);
-    return (void*)total_gen;
-}
-
