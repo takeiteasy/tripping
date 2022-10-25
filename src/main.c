@@ -42,7 +42,7 @@ typedef struct {
 static volatile sig_atomic_t exit_loops = 0;
 
 static void print_help (const char* prog_name) {
-    printf("http://www.github.com/badassmofo/tripping\n");
+    printf("http://www.github.com/takeiteasy/tripping\n");
     printf("usage: %s [mode] [option] [options]\n\n", prog_name);
     printf("modes\n");
     printf("  single -> If no arguments are entered, it'll spit out a random tripcode\n");
